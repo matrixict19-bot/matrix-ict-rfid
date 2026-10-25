@@ -64,7 +64,7 @@ jobs:
           ls -la
           cat buildozer.spec
           echo "=== reader.jar ==="
-          ls -lh reader.jar || (echo "MISSING - trying 03_Libs"; if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi; ls -lh reader.jar)
+          ls -lh reader.jar || (echo "MISSING reader.jar - will try 03_Libs"; if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi; ls -lh reader.jar)
           echo "=== icon ==="
           ls -lh icon.png || echo "no icon.png - will use default"
 
@@ -72,6 +72,7 @@ jobs:
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
+          echo "Build finished with code ${PIPESTATUS[0]}"
           exit ${PIPESTATUS[0]}
         continue-on-error: true
 
@@ -92,4 +93,3 @@ jobs:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
           if-no-files-found: error
-
