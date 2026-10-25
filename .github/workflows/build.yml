@@ -12,6 +12,7 @@ jobs:
       - name: Free Disk Space
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          rm -rf .buildozer
           df -h
 
       - name: Set up Python 3.11
@@ -44,9 +45,12 @@ jobs:
           chmod +x $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
           mkdir -p $SDK_ROOT/tools/bin
           ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager || true
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $SDK_ROOT/licenses/android-sdk-preview-license || true
           yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;28.1.13356709" || true
 
       - name: Install Buildozer
         run: |
@@ -54,18 +58,38 @@ jobs:
           pip install Cython==0.29.36
           pip install https://github.com/kivy/buildozer/archive/master.zip
 
-      - name: Prepare UHF libs C72 - KEEP READER.JAR
+      - name: Verify files
         run: |
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
-          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
-          ls -lh reader.jar
+          echo "=== Files ==="
+          ls -la
+          cat buildozer.spec
+          echo "=== reader.jar ==="
+          ls -lh reader.jar || (echo "MISSING reader.jar - will try 03_Libs"; if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi; ls -lh reader.jar)
+          echo "=== icon ==="
+          ls -lh icon.png || echo "no icon.png - will use default"
 
-      - name: Build APK
+      - name: Build APK with full log
         run: |
-          buildozer android debug
+          set -o pipefail
+          buildozer android debug --verbose 2>&1 | tee build.log
+          echo "Build finished with code ${PIPESTATUS[0]}"
+          exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Upload logs always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build.log
+            .buildozer/logs/*
+          if-no-files-found: warn
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
+          if-no-files-found: error
