@@ -12,31 +12,38 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
+      - name: Install system deps + Java 17
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq openjdk-17-jdk libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip libssl-dev wget
-      - name: Install Android cmdline-tools manually
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
+      - name: Force Java 17
         run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          java -version
+          javac -version
+      - name: Install Android cmdline-tools with Java17
+        run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           cd /tmp
+          rm -rf cmdline-tools tools.zip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip
-          mv cmdline-tools/* $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/ || true
-          ls $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-          ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c4501b1f" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          mv cmdline-tools/* $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/
+          $HOME/.[STRIPPED 74 bytes] --version
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.[STRIPPED 71 bytes]"d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.[STRIPPED 70 bytes] | $HOME/.[STRIPPED 74 bytes] --licenses || true
       - name: Install Buildozer master
         run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
           pip install --upgrade pip
           pip install Cython==0.29.36
           pip install https://github.com/kivy/buildozer/archive/master.zip
-          pip install python-for-android
       - name: Prepare UHF libs
         run: |
           if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
@@ -44,6 +51,8 @@ jobs:
           ls -lh reader.jar
       - name: Build APK
         run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
           if [ -f "buildozer_full_UHF.spec" ]; then cp buildozer_full_UHF.spec buildozer.spec; fi
           buildozer android debug
       - name: Upload APK
