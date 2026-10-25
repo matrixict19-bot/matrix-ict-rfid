@@ -30,9 +30,8 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Fix buildozer.spec (one time only)
+      - name: Create clean buildozer.spec
         run: |
-          # This spec was causing all the DuplicateOption errors - we fix it cleanly
           cat > buildozer.spec << 'EOF'
           [app]
           title = MATRIX ICT RFID
@@ -42,31 +41,42 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas,json,jar
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
           version = 1.0
-          requirements = python3,kivy==2.3.1,pyjnius,requests
+          requirements = python3==3.11.6,kivy==2.3.1,pyjnius,requests
           orientation = portrait
           fullscreen = 0
           android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
           android.api = 33
           android.minapi = 24
           android.ndk = 25b
-          android.sdk = 33
           android.accept_sdk_license_agreement = True
           android.add_jars = reader.jar
-          p4a.branch = 2024.01.21
+          p4a.branch = master
           [buildozer]
           log_level = 2
           warn_on_root = 1
           EOF
-          echo "=== NEW buildozer.spec ==="
           cat buildozer.spec
-          # Copy UHF libs if exist
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; ls -lh reader.jar; fi
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
           if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
+          ls -lh reader.jar || echo "reader.jar not found - continuing without it"
+
+      - name: Pre-clone and patch p4a (fix pip 26 bug)
+        run: |
+          mkdir -p .buildozer/android/platform
+          rm -rf .buildozer/android/platform/python-for-android
+          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --depth 1
+          cd .buildozer/android/platform/python-for-android
+          echo "Cloned p4a master: $(git log -1 --oneline)"
+          sed -i 's/pip install -U pip/echo "skip pip upgrade - patched for pip26"/g' pythonforandroid/build.py
+          echo "Patched build.py"
 
       - name: Build APK
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
+          echo "Build finished with ${PIPESTATUS[0]}"
+          ls -lh bin/ || echo "No bin yet"
+          find bin -name "*.apk" 2>/dev/null || echo "No APK found"
 
       - name: Upload logs
         if: always()
@@ -84,3 +94,4 @@ jobs:
         with:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
+          if-no-files-found: warn
