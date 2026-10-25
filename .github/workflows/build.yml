@@ -18,25 +18,20 @@ jobs:
           sudo apt-get install -y -qq openjdk-17-jdk libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip libssl-dev wget
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
           echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
-      - name: Force Java 17
-        run: |
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
-          java -version
-          javac -version
       - name: Install Android cmdline-tools with Java17
         run: |
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
+          rm -rf /tmp/cmdline-tools /tmp/tools.zip
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           cd /tmp
-          rm -rf cmdline-tools tools.zip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip
-          mv cmdline-tools/* $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/
+          cp -r cmdline-tools/* $HOME/.[STRIPPED 65 bytes] +x $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/*
+          ls $HOME/.[STRIPPED 68 bytes]"8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.[STRIPPED 71 bytes]"d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.[STRIPPED 67 bytes]
           $HOME/.[STRIPPED 74 bytes] --version
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.[STRIPPED 71 bytes]"d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.[STRIPPED 70 bytes] | $HOME/.[STRIPPED 74 bytes] --licenses || true
+          yes | $HOME/.[STRIPPED 74 bytes] --licenses || true
       - name: Install Buildozer master
         run: |
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -48,7 +43,6 @@ jobs:
         run: |
           if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
           if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
-          ls -lh reader.jar
       - name: Build APK
         run: |
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
