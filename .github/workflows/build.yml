@@ -1,0 +1,37 @@
+name: Build MATRIX APK FULL UHF
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openjdk-17-jdk libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip
+      - name: Install Buildozer
+        run: pip install buildozer==1.5.0 Cython==0.29.36
+      - name: Prepare UHF libs
+        run: |
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
+          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./libs; fi
+          if [ -f "reader.jar" ]; then echo "reader.jar found"; fi
+          ls -R libs || true
+      - name: Build APK
+        run: |
+          cp buildozer_full_UHF.spec buildozer.spec
+          buildozer android debug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-ict-apk-full-uhf
+          path: bin/*.apk
