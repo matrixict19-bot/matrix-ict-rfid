@@ -12,32 +12,24 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps + Java 17
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Accept licenses and fix old path for Buildozer
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq openjdk-17-jdk libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip libssl-dev wget
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-      - name: Install Android cmdline-tools + fix old path
-        run: |
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
-          rm -rf /tmp/cmdline-tools /tmp/tools.zip
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+          yes | sdkmanager --licenses || true
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-          cd /tmp
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip
-          cp -a cmdline-tools/. $HOME/.[STRIPPED 65 bytes] +x $HOME/.[STRIPPED 74 bytes]
-          # Fix: Buildozer still looks for old path tools/bin/sdkmanager
-          ln -sf $HOME/.[STRIPPED 74 bytes] $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          ln -sf $HOME/.[STRIPPED 74 bytes] $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager || true
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.[STRIPPED 71 bytes]"d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.[STRIPPED 70 bytes] | $HOME/.[STRIPPED 74 bytes] --licenses || true
-          ls -lh $HOME/.buildozer/android/platform/android-sdk/tools/bin/
-      - name: Install Buildozer master
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin
+          cp -r $ANDROID_HOME/cmdline-tools/latest/* $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/ || true
+          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager || true
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.[STRIPPED 71 bytes]"d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.[STRIPPED 68 bytes] name: Install Buildozer
         run: |
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
           pip install --upgrade pip
           pip install Cython==0.29.36
           pip install https://github.com/kivy/buildozer/archive/master.zip
@@ -47,8 +39,6 @@ jobs:
           if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
       - name: Build APK
         run: |
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
           if [ -f "buildozer_full_UHF.spec" ]; then cp buildozer_full_UHF.spec buildozer.spec; fi
           buildozer android debug
       - name: Upload APK
