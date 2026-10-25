@@ -58,7 +58,7 @@ jobs:
               sed -i '/^android.sdk/d' "$SPEC" || true
               sed -i '/^android.accept_sdk_license_agreement/d' "$SPEC" || true
               sed -i '/^android.add_jars/d' "$SPEC" || true
-              echo "p4a.branch = v2024.10.13" >> "$SPEC"
+              echo "p4a.branch = 2024.01.21" >> "$SPEC"
               echo "android.ndk = 25b" >> "$SPEC"
               echo "android.api = 33" >> "$SPEC"
               echo "android.minapi = 24" >> "$SPEC"
@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir -p .buildozer/android/platform/
           rm -rf .buildozer/android/platform/python-for-android
-          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch v2024.10.13 --depth 1
+          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch 2024.01.21 --depth 1
           cd .buildozer/android/platform/python-for-android && git log -1 --oneline
           sed -i 's/pip install -U pip/echo "skip pip upgrade"/g' pythonforandroid/build.py || true
       - name: Build APK
