@@ -39,7 +39,6 @@ jobs:
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
           yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --list | head -20
       - name: Install Buildozer
         run: |
           pip install --upgrade pip
@@ -49,9 +48,10 @@ jobs:
         run: |
           if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
           if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
+          ls -lh reader.jar || echo "no reader.jar"
+          ls -lh libs/ || echo "no libs"
       - name: Build APK
         run: |
-          if [ -f "buildozer_full_UHF.spec" ]; then cp buildozer_full_UHF.spec buildozer.spec; fi
           buildozer android debug
       - name: Upload APK
         uses: actions/upload-artifact@v4
