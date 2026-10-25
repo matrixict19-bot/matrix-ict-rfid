@@ -9,6 +9,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          rm -rf .buildozer
+          df -h
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -20,20 +26,31 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Fix SDK paths for Buildozer
+      - name: Install system deps
         run: |
-          yes | sdkmanager --licenses || true
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-          cp -r $ANDROID_HOME/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/ || true
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager || true
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager || true
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          sudo apt-get update -qq
+          sudo apt-get install -y libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip zlib1g-dev libssl-dev
+
+      - name: Install Android SDK for Buildozer
+        run: |
+          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/cmdline-tools
+          mkdir -p $SDK_ROOT/licenses
+          cd /tmp
+          rm -rf cmdline-tools tools.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip
+          rm -rf $SDK_ROOT/cmdline-tools/latest
+          mv cmdline-tools $SDK_ROOT/cmdline-tools/latest
+          chmod +x $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
+          mkdir -p $SDK_ROOT/tools/bin
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager || true
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $SDK_ROOT/licenses/android-sdk-preview-license || true
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;28.1.13356709" || true
 
       - name: Install Buildozer
         run: |
@@ -41,28 +58,26 @@ jobs:
           pip install Cython==0.29.36
           pip install https://github.com/kivy/buildozer/archive/master.zip
 
-      - name: Prepare UHF libs
+      - name: Verify files
         run: |
-          echo "=== Checking files ==="
+          echo "=== Files ==="
           ls -la
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; echo "Copied reader.jar"; fi
-          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; echo "Copied libs"; fi
-          ls -lh reader.jar
           cat buildozer.spec
+          echo "=== reader.jar ==="
+          ls -lh reader.jar || (echo "MISSING reader.jar - will try 03_Libs"; if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi; ls -lh reader.jar)
+          echo "=== icon ==="
+          ls -lh icon.png || echo "no icon.png - will use default"
 
-      - name: Build APK
+      - name: Build APK with full log
         run: |
-          buildozer android debug --verbose
+          set -o pipefail
+          buildozer android debug --verbose 2>&1 | tee build.log
+          echo "Build finished with code ${PIPESTATUS[0]}"
+          exit ${PIPESTATUS[0]}
+        continue-on-error: true
 
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: matrix-ict-apk-full-uhf
-          path: bin/*.apk
-
-      - name: Upload logs if failed
-        if: failure()
+      - name: Upload logs always
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
@@ -70,3 +85,11 @@ jobs:
             build.log
             .buildozer/logs/*
           if-no-files-found: warn
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-ict-apk-full-uhf
+          path: bin/*.apk
+          if-no-files-found: error
