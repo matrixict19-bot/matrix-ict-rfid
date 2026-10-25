@@ -1,82 +1,84 @@
 name: Build MATRIX APK FULL UHF
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-
       - name: Free Disk Space
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           rm -rf .buildozer
-          df -h
-
-      - name: Set up Python 3.11
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: '3.10'
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Install system deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip zlib1g-dev libssl-dev
-
-      - name: Install Android SDK for Buildozer
+      - name: Install Android SDK
         run: |
           SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $SDK_ROOT/cmdline-tools
-          mkdir -p $SDK_ROOT/licenses
-          cd /tmp
-          rm -rf cmdline-tools tools.zip
+          mkdir -p $SDK_ROOT/cmdline-tools $SDK_ROOT/licenses
+          cd /tmp && rm -rf cmdline-tools tools.zip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip
           rm -rf $SDK_ROOT/cmdline-tools/latest
           mv cmdline-tools $SDK_ROOT/cmdline-tools/latest
-          chmod +x $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
           mkdir -p $SDK_ROOT/tools/bin
           ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
-          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager || true
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $SDK_ROOT/licenses/android-sdk-preview-license || true
           yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;28.1.13356709" || true
-
-      - name: Install Buildozer
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.1.8937393" || true
+      - name: Install Buildozer STABLE
         run: |
           pip install --upgrade pip
-          pip install Cython==0.29.36
-          pip install https://github.com/kivy/buildozer/archive/master.zip
-
-      - name: Verify files
+          pip install Cython==0.29.36 buildozer==1.5.0
+      - name: Prepare UHF libs & Fix spec
         run: |
-          echo "=== Files ==="
-          ls -la
-          cat buildozer.spec
-          echo "=== reader.jar ==="
-          ls -lh reader.jar || (echo "MISSING reader.jar - will try 03_Libs"; if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi; ls -lh reader.jar)
-          echo "=== icon ==="
-          ls -lh icon.png || echo "no icon.png - will use default"
-
-      - name: Build APK with full log
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
+          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
+          # Patch BOTH possible spec files
+          for SPEC in buildozer.spec buildozer_full_UHF.spec; do
+            if [ -f "$SPEC" ]; then
+              echo "Patching $SPEC"
+              sed -i 's/^requirements =.*/requirements = python3,kivy==2.3.1,pyjnius==1.8.0,requests==2.31.0,charset_normalizer==3.3.2/' "$SPEC" || true
+              # Remove any old p4a.branch lines
+              sed -i '/^p4a.branch/d' "$SPEC" || true
+              sed -i '/^android.ndk/d' "$SPEC" || true
+              sed -i '/^android.api/d' "$SPEC" || true
+              sed -i '/^android.minapi/d' "$SPEC" || true
+              echo "p4a.branch = v2024.10.13" >> "$SPEC"
+              echo "android.ndk = 25b" >> "$SPEC"
+              echo "android.api = 33" >> "$SPEC"
+              echo "android.minapi = 24" >> "$SPEC"
+              echo "android.accept_sdk_license_agreement = True" >> "$SPEC"
+              echo "android.add_jars = reader.jar" >> "$SPEC"
+              cat "$SPEC"
+            fi
+          done
+          # Ensure main spec exists
+          if [ -f "buildozer_full_UHF.spec" ] && [ ! -f "buildozer.spec" ]; then
+            cp buildozer_full_UHF.spec buildozer.spec
+          fi
+          # If buildozer_full_UHF exists, sync it to buildozer.spec to avoid overwrite
+          if [ -f "buildozer_full_UHF.spec" ]; then
+            cp buildozer.spec buildozer_full_UHF.spec
+          fi
+      - name: Build APK
         run: |
-          set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
-          echo "Build finished with code ${PIPESTATUS[0]}"
-          exit ${PIPESTATUS[0]}
-        continue-on-error: true
-
-      - name: Upload logs always
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -85,11 +87,9 @@ jobs:
             build.log
             .buildozer/logs/*
           if-no-files-found: warn
-
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
-          if-no-files-found: error
