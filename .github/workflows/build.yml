@@ -1,90 +1,73 @@
 name: Build MATRIX APK FULL UHF
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
-          rm -rf .buildozer
-      - name: Set up Python 3.10
+
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Install system deps
+
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip zlib1g-dev libssl-dev
-      - name: Install Android SDK
-        run: |
-          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $SDK_ROOT/cmdline-tools $SDK_ROOT/licenses
-          cd /tmp && rm -rf cmdline-tools tools.zip
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip
-          rm -rf $SDK_ROOT/cmdline-tools/latest
-          mv cmdline-tools $SDK_ROOT/cmdline-tools/latest
-          mkdir -p $SDK_ROOT/tools/bin
-          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $SDK_ROOT/licenses/android-sdk-preview-license || true
-          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.1.8937393" || true
-      - name: Install Buildozer STABLE
+          sudo apt-get install -y python3-pip zip unzip openjdk-17-jdk libffi-dev libssl-dev libltdl-dev autoconf automake libtool pkg-config zlib1g-dev
+
+      - name: Install Buildozer
         run: |
           pip install --upgrade pip
-          pip install Cython==0.29.36 buildozer==1.5.0
-      - name: Prepare UHF libs & Fix spec
+          pip install buildozer==1.5.0 cython==0.29.36
+
+      - name: Fix buildozer.spec (one time only)
         run: |
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
-          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
-          for SPEC in buildozer.spec buildozer_full_UHF.spec; do
-            if [ -f "$SPEC" ]; then
-              sed -i 's/^requirements =.*/requirements = python3,kivy==2.3.1,pyjnius==1.8.0,requests==2.31.0,charset_normalizer==3.3.2/' "$SPEC" || true
-              sed -i '/^p4a.branch/d' "$SPEC" || true
-              sed -i '/^android.ndk/d' "$SPEC" || true
-              sed -i '/^android.api/d' "$SPEC" || true
-              sed -i '/^android.minapi/d' "$SPEC" || true
-              sed -i '/^android.sdk/d' "$SPEC" || true
-              sed -i '/^android.accept_sdk_license_agreement/d' "$SPEC" || true
-              sed -i '/^android.add_jars/d' "$SPEC" || true
-              echo "p4a.branch = 2024.01.21" >> "$SPEC"
-              echo "android.ndk = 25b" >> "$SPEC"
-              echo "android.api = 33" >> "$SPEC"
-              echo "android.minapi = 24" >> "$SPEC"
-              echo "android.sdk = 33" >> "$SPEC"
-              echo "android.accept_sdk_license_agreement = True" >> "$SPEC"
-              echo "android.add_jars = reader.jar" >> "$SPEC"
-            fi
-          done
-          if [ -f "buildozer_full_UHF.spec" ] && [ ! -f "buildozer.spec" ]; then cp buildozer_full_UHF.spec buildozer.spec; fi
-          if [ -f "buildozer_full_UHF.spec" ]; then cp buildozer.spec buildozer_full_UHF.spec; fi
+          # This spec was causing all the DuplicateOption errors - we fix it cleanly
+          cat > buildozer.spec << 'EOF'
+          [app]
+          title = MATRIX ICT RFID
+          package.name = matrixictrfid
+          package.domain = com.matrixict.rfid
+          source.dir = .
+          source.include_exts = py,png,jpg,kv,atlas,json,jar
+          source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
+          version = 1.0
+          requirements = python3,kivy==2.3.1,pyjnius,requests
+          orientation = portrait
+          fullscreen = 0
+          android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
+          android.api = 33
+          android.minapi = 24
+          android.ndk = 25b
+          android.sdk = 33
+          android.accept_sdk_license_agreement = True
+          android.add_jars = reader.jar
+          p4a.branch = 2024.01.21
+          [buildozer]
+          log_level = 2
+          warn_on_root = 1
+          EOF
+          echo "=== NEW buildozer.spec ==="
           cat buildozer.spec
-      - name: Force p4a stable branch
-        run: |
-          mkdir -p .buildozer/android/platform/
-          rm -rf .buildozer/android/platform/python-for-android
-          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch 2024.01.21 --depth 1
-          cd .buildozer/android/platform/python-for-android && git log -1 --oneline
-          sed -i 's/pip install -U pip/echo "skip pip upgrade"/g' pythonforandroid/build.py || true
+          # Copy UHF libs if exist
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; ls -lh reader.jar; fi
+          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
+
       - name: Build APK
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "Exit: $BUILD_EXIT"
-          ls -lh bin/ || true
-          if [ $BUILD_EXIT -ne 0 ]; then tail -200 build.log; exit $BUILD_EXIT; fi
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,6 +77,7 @@ jobs:
             build.log
             .buildozer/logs/*
           if-no-files-found: warn
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
