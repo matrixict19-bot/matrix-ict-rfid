@@ -17,19 +17,29 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Fix SDK paths for Buildozer
+      - name: Install system deps
         run: |
-          yes | sdkmanager --licenses || true
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-          cp -r $ANDROID_HOME/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/ || true
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager || true
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager || true
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          sudo apt-get update -qq
+          sudo apt-get install -y libtool libffi-dev autoconf automake pkg-config libltdl-dev zip unzip
+      - name: Install Android SDK cmdline-tools
+        run: |
+          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/cmdline-tools
+          mkdir -p $SDK_ROOT/licenses
+          cd /tmp
+          rm -rf cmdline-tools tools.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip
+          rm -rf $SDK_ROOT/cmdline-tools/latest
+          mv cmdline-tools $SDK_ROOT/cmdline-tools/latest
+          chmod +x $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
+          mkdir -p $SDK_ROOT/tools/bin
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager || true
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --list | head -20
       - name: Install Buildozer
         run: |
           pip install --upgrade pip
