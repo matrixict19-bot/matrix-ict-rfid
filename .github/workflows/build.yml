@@ -55,61 +55,51 @@ jobs:
           log_level = 2
           warn_on_root = 1
           EOF
-          cat buildozer.spec
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; echo "reader.jar copied"; fi
+          cp 03_Libs_UHF_C72/reader.jar ./reader.jar || true
 
-      - name: Pre-clone p4a master - fix ALL old bugs
+      - name: Pre-clone p4a and clean SDK - FIX #50-#54
         run: |
-          echo "Clean old SDK/NDK to force fresh download with correct structure (fixes sdkmanager path)"
           rm -rf $HOME/.buildozer/android/platform/android-sdk
           rm -rf $HOME/.buildozer/android/platform/android-ndk-*
           rm -rf .buildozer/android/platform/python-for-android
           mkdir -p .buildozer/android/platform
-          
-          echo "Clone p4a master (branch exists)"
           git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
-          echo "Cloned $(cd .buildozer/android/platform/python-for-android && git log -1 --oneline)"
-          
-          echo "Patch pip 26 bug"
-          sed -i 's/pip install -U pip/echo "skip pip upgrade"/g' .buildozer/android/platform/python-for-android/pythonforandroid/build.py
+          sed -i 's/pip install -U pip/echo skip pip upgrade/g' .buildozer/android/platform/python-for-android/pythonforandroid/build.py
 
-      - name: Build APK - with sdkmanager compat fix
+      - name: Download SDK and FIX license BEFORE build - FIX #53 and #55
         run: |
-          set -o pipefail
-          # First run will download SDK (may fail on license), we fix sdkmanager path then retry
-          echo "=== Attempt 1: Download SDK ==="
-          buildozer android debug --verbose 2>&1 | tee build.log || true
+          # Download SDK via buildozer dry-run (will download commandlinetools)
+          buildozer android debug --verbose 2>&1 | head -100 || true
           
           SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          NEW_MGR=$SDK_DIR/cmdline-tools/latest/bin/sdkmanager
-          OLD_MGR=$SDK_DIR/tools/bin/sdkmanager
+          echo "SDK at $SDK_DIR"
+          ls -R $SDK_DIR | head -100
           
-          echo "=== Fix sdkmanager path (new -> old compat) ==="
-          if [ -f "$NEW_MGR" ]; then
-            mkdir -p $(dirname $OLD_MGR)
-            ln -sf $NEW_MGR $OLD_MGR
-            echo "Linked $NEW_MGR -> $OLD_MGR"
-          fi
+          # Find sdkmanager (new and old location)
+          NEW_MGR=$(find $SDK_DIR -name sdkmanager -type f 2>/dev/null | head -1)
+          echo "Found sdkmanager at: $NEW_MGR"
           
-          echo "=== Accept licenses ==="
           if [ -f "$NEW_MGR" ]; then
+            chmod +x $NEW_MGR
+            # Accept all licenses BEFORE buildozer tries to install build-tools
             yes | $NEW_MGR --sdk_root=$SDK_DIR --licenses || true
-          fi
-          if [ -f "$OLD_MGR" ]; then
-            yes | $OLD_MGR --sdk_root=$SDK_DIR --licenses || true
+            # Manually install required packages with license already accepted
+            $NEW_MGR --sdk_root=$SDK_DIR "platform-tools" "build-tools;33.0.2" "build-tools;37.0.0" "platforms;android-33" || true
           fi
           
-          # Create licenses manually as fallback
+          # Also create licenses file manually as fallback (does not affect other ops)
           mkdir -p $SDK_DIR/licenses
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
           echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
-          
-          echo "=== Attempt 2: Real build ==="
-          buildozer android debug --verbose 2>&1 | tee -a build.log
-          echo "Exit code: ${PIPESTATUS[0]}"
-          ls -lh bin/ || true
-          find . -maxdepth 3 -name "*.apk" -type f
+          echo "Licenses created"
+
+      - name: Build APK - FINAL
+        run: |
+          set -o pipefail
+          buildozer android debug --verbose 2>&1 | tee build.log
+          ls -lh bin/
+          find . -name "*.apk" | head -5
 
       - name: Upload logs
         if: always()
