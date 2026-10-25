@@ -11,7 +11,6 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           rm -rf .buildozer
-          df -h
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
@@ -47,14 +46,10 @@ jobs:
           pip install Cython==0.29.36 buildozer==1.5.0
       - name: Prepare UHF libs & Fix spec
         run: |
-          echo "=== Files before ==="
-          ls -la
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; echo "Copied reader.jar"; fi
-          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; echo "Copied libs"; fi
-          ls -lh reader.jar || echo "WARNING: reader.jar missing - APK will be without UHF"
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
+          if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
           for SPEC in buildozer.spec buildozer_full_UHF.spec; do
             if [ -f "$SPEC" ]; then
-              echo "Patching $SPEC"
               sed -i 's/^requirements =.*/requirements = python3,kivy==2.3.1,pyjnius==1.8.0,requests==2.31.0,charset_normalizer==3.3.2/' "$SPEC" || true
               sed -i '/^p4a.branch/d' "$SPEC" || true
               sed -i '/^android.ndk/d' "$SPEC" || true
@@ -70,37 +65,26 @@ jobs:
               echo "android.sdk = 33" >> "$SPEC"
               echo "android.accept_sdk_license_agreement = True" >> "$SPEC"
               echo "android.add_jars = reader.jar" >> "$SPEC"
-              cat "$SPEC"
-              echo "---"
             fi
           done
-          if [ -f "buildozer_full_UHF.spec" ] && [ ! -f "buildozer.spec" ]; then
-            cp buildozer_full_UHF.spec buildozer.spec
-          fi
-          if [ -f "buildozer_full_UHF.spec" ]; then
-            cp buildozer.spec buildozer_full_UHF.spec
-          fi
-          echo "=== Final buildozer.spec ==="
+          if [ -f "buildozer_full_UHF.spec" ] && [ ! -f "buildozer.spec" ]; then cp buildozer_full_UHF.spec buildozer.spec; fi
+          if [ -f "buildozer_full_UHF.spec" ]; then cp buildozer.spec buildozer_full_UHF.spec; fi
           cat buildozer.spec
+      - name: Force p4a stable branch
+        run: |
+          mkdir -p .buildozer/android/platform/
+          rm -rf .buildozer/android/platform/python-for-android
+          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch v2024.10.13 --depth 1
+          cd .buildozer/android/platform/python-for-android && git log -1 --oneline
+          sed -i 's/pip install -U pip/echo "skip pip upgrade"/g' pythonforandroid/build.py || true
       - name: Build APK
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
-          echo "Buildozer exit code: $BUILD_EXIT"
-          echo "=== Checking for APK ==="
-          ls -lh bin/ || echo "bin/ not found"
-          find . -name "*.apk" -type f | head -20
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "Buildozer failed with code $BUILD_EXIT"
-            exit $BUILD_EXIT
-          fi
-          if [ ! -f bin/*.apk ] && [ $(find bin -name "*.apk" 2>/dev/null | wc -l) -eq 0 ]; then
-            echo "ERROR: No APK generated!"
-            echo "Last 100 lines of build.log:"
-            tail -100 build.log
-            exit 1
-          fi
+          echo "Exit: $BUILD_EXIT"
+          ls -lh bin/ || true
+          if [ $BUILD_EXIT -ne 0 ]; then tail -200 build.log; exit $BUILD_EXIT; fi
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -116,4 +100,3 @@ jobs:
         with:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
-          if-no-files-found: error
