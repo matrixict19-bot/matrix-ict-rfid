@@ -30,7 +30,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Create clean buildozer.spec
+      - name: Create clean buildozer.spec - FINAL FIX
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -56,27 +56,50 @@ jobs:
           warn_on_root = 1
           EOF
           cat buildozer.spec
-          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
+          if [ -f "03_Libs_UHF_C72/reader.jar" ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; echo "Copied reader.jar"; ls -lh reader.jar; fi
           if [ -d "03_Libs_UHF_C72/libs" ]; then cp -r 03_Libs_UHF_C72/libs ./; fi
-          ls -lh reader.jar || echo "reader.jar not found - continuing without it"
 
-      - name: Pre-clone and patch p4a (fix pip 26 bug)
+      - name: Pre-clone p4a master and patch ALL bugs
         run: |
-          mkdir -p .buildozer/android/platform
+          echo "=== 1. Clean old p4a ==="
           rm -rf .buildozer/android/platform/python-for-android
-          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --depth 1
+          mkdir -p .buildozer/android/platform
+          
+          echo "=== 2. Clone master (exists) ==="
+          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
           cd .buildozer/android/platform/python-for-android
-          echo "Cloned p4a master: $(git log -1 --oneline)"
-          sed -i 's/pip install -U pip/echo "skip pip upgrade - patched for pip26"/g' pythonforandroid/build.py
-          echo "Patched build.py"
+          echo "Cloned: $(git log -1 --oneline)"
+          
+          echo "=== 3. Patch pip 26 bug (BuildDependencyInstallError) ==="
+          sed -i 's/pip install -U pip/echo "skip pip upgrade - patched"/g' pythonforandroid/build.py
+          
+          echo "=== 4. Pre-create Android SDK licenses to fix Aidl error ==="
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_DIR/licenses
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
+          echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
+          echo "y" > $SDK_DIR/licenses/android-sdk-preview-license || true
+          echo "Licenses created"
+          cat $SDK_DIR/licenses/android-sdk-license
+          
+          cd $GITHUB_WORKSPACE
 
-      - name: Build APK
+      - name: Build APK - with license acceptance
         run: |
           set -o pipefail
+          # Accept all licenses before build
+          SDK_MGR=$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          if [ -f "$SDK_MGR" ]; then
+            echo "Accepting licenses via sdkmanager..."
+            yes | $SDK_MGR --sdk_root=$HOME/.buildozer/android/platform/android-sdk --licenses || true
+          fi
           buildozer android debug --verbose 2>&1 | tee build.log
-          echo "Build finished with ${PIPESTATUS[0]}"
-          ls -lh bin/ || echo "No bin yet"
-          find bin -name "*.apk" 2>/dev/null || echo "No APK found"
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "Build exit: $EXIT_CODE"
+          ls -lh bin/ || echo "No bin"
+          find . -name "*.apk" -type f | head -20
+          exit $EXIT_CODE
 
       - name: Upload logs
         if: always()
