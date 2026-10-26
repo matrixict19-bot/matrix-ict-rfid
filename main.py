@@ -1,18 +1,28 @@
 
-# MATRIX ICT - V16 STABLE - Crash Catcher + Safe Logo + No Canvas Crash
+# MATRIX ICT - V19 FIX BLANK SCREEN - 5 POINTS - make_safe_card + safe folder - Crash Catcher + Safe Logo + No Canvas Crash
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
 # Global crash catcher - writes even on Python crash
 def get_app_folder_safe():
+    # FIX 5 POINTS: Use private app folder first to avoid permission crash (blank screen)
+    try:
+        from android.storage import app_storage_path
+        return app_storage_path()
+    except:
+        pass
     try:
         folder = os.path.dirname(os.path.abspath(__file__))
     except:
         folder = os.getcwd()
+    # Only use Documents if it exists, don't force it
     if "Matrix-ICT" not in folder:
         for p in ["/storage/emulated/0/Documents/Matrix-ICT", "/sdcard/Documents/Matrix-ICT"]:
-            if os.path.exists(p):
-                return p
+            try:
+                if os.path.exists(p):
+                    return p
+            except:
+                pass
     return folder
 
 APP_FOLDER = get_app_folder_safe()
@@ -70,6 +80,10 @@ def find_logo():
         if os.path.exists(p):
             return p
     return None
+
+def make_safe_card():
+    # FIX BLANK SCREEN - was missing in V18, caused NameError in Pydroid3 and APK
+    return BoxLayout(orientation='vertical', padding=12, spacing=6, size_hint_y=None)
 
 def init_db(db_path):
     try:
