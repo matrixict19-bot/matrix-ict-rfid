@@ -1,11 +1,10 @@
 
-# MATRIX ICT - V21 FILE CHOOSER + 5 POINTS - Import picker - 5 POINTS - make_safe_card + safe folder - Crash Catcher + Safe Logo + No Canvas Crash
+# MATRIX ICT - V24 IMPORT+EXPORT ANYWHERE - 5 POINTS - No Matrix-ICT, pick from anywhere
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
 # Global crash catcher - writes even on Python crash
 def get_app_folder_safe():
-    # FIX 5 POINTS: Use private app folder first to avoid permission crash (blank screen)
     try:
         from android.storage import app_storage_path
         return app_storage_path()
@@ -15,14 +14,6 @@ def get_app_folder_safe():
         folder = os.path.dirname(os.path.abspath(__file__))
     except:
         folder = os.getcwd()
-    # Only use Documents if it exists, don't force it
-    if "Matrix-ICT" not in folder:
-        for p in ["/storage/emulated/0/Documents/Matrix-ICT", "/sdcard/Documents/Matrix-ICT"]:
-            try:
-                if os.path.exists(p):
-                    return p
-            except:
-                pass
     return folder
 
 APP_FOLDER = get_app_folder_safe()
@@ -77,21 +68,22 @@ PRIMARY = "#FF8C00"
 SECONDARY = "#2B2E33"
 
 def find_logo():
-    search_dirs = [
-        APP_FOLDER,
-        "/storage/emulated/0/Documents/Matrix-ICT",
-        "/sdcard/Documents/Matrix-ICT",
-        os.getcwd()
-    ]
+    search_dirs = [APP_FOLDER, os.getcwd()]
     for d in search_dirs:
-        if not d: continue
+        if not d:
+            continue
+        try:
+            if not os.path.exists(d):
+                continue
+        except:
+            continue
         for name in ["logo.png", "logo_header.png", "icon.png"]:
             p = os.path.join(d, name)
             try:
                 if os.path.exists(p):
                     return p
             except:
-                pass
+                continue
     return None
 
 def make_safe_card():
@@ -118,37 +110,23 @@ def init_db(db_path):
         return 0
 
 def find_csv():
-    # V20 FIX - 5 POINTS: search in ALL locations (private + Documents)
-    search_dirs = [
-        APP_FOLDER,
-        "/storage/emulated/0/Documents/Matrix-ICT",
-        "/sdcard/Documents/Matrix-ICT",
-        "/storage/emulated/0/Download",
-        os.getcwd(),
-        os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else ""
-    ]
-    csv_names = ["Matrix_Items.csv", "MATRIX_Items.csv", "matrix_items.csv", "Matrix_ICT.csv", "items.csv"]
+    search_dirs = [APP_FOLDER, "/storage/emulated/0/Download", "/sdcard/Download", os.getcwd()]
+    csv_names = ["Matrix_Items.csv", "MATRIX_Items.csv", "matrix_items.csv", "items.csv"]
     for d in search_dirs:
-        if not d: continue
+        if not d:
+            continue
+        try:
+            if not os.path.exists(d):
+                continue
+        except:
+            continue
         for name in csv_names:
             p = os.path.join(d, name)
             try:
                 if os.path.exists(p):
-                    log_to_file(f"CSV found: {p}")
                     return p
             except:
-                pass
-    # also check if file in Documents with different case
-    for d in search_dirs:
-        try:
-            if os.path.exists(d):
-                for fn in os.listdir(d):
-                    if fn.lower().endswith('.csv'):
-                        p = os.path.join(d, fn)
-                        log_to_file(f"CSV found by scan: {p}")
-                        return p
-        except:
-            pass
+                continue
     return None
 
 class UHFManager_G2_Real:
@@ -479,167 +457,206 @@ class BarcodeScreen(Screen):
         except Exception as e:
             log_to_file(f"go_to_rfid crash: {e} {traceback.format_exc()}")
 
-    def import_csv(self, inst):
-        # V21 - 5 POINTS: file chooser so client can pick CSV from device - no impact on other ops
-        try:
-            # Try auto-find first for quick import, but also show chooser if not found
-            auto_path = find_csv()
-            if auto_path and os.path.exists(auto_path):
-                # If auto found, import directly (backward compatible)
-                self.do_import_file(auto_path)
-                # Also show where it was found
-                self.lbl_status.text = f"Auto: {os.path.basename(auto_path)}"
-                return
-        except:
-            pass
-        # Open file chooser
-        self.open_csv_chooser()
 
-    def open_csv_chooser(self):
-        # V21 - File chooser popup - client picks CSV from device
+    def import_csv(self, inst):
+        self.open_csv_chooser_anywhere()
+
+    def request_all_files_permission(self):
         try:
-            # Determine start path - 5 POINTS: check Documents first (where client has files)
-            start_paths = [
-                "/storage/emulated/0/Documents/Matrix-ICT",
-                "/storage/emulated/0/Documents",
-                "/storage/emulated/0/Download",
-                "/sdcard/Documents/Matrix-ICT",
-                APP_FOLDER,
-                "/storage/emulated/0"
-            ]
-            start_path = APP_FOLDER
-            for p in start_paths:
-                try:
-                    if os.path.exists(p):
-                        start_path = p
-                        break
-                except:
-                    pass
-            
-            log_to_file(f"Chooser start: {start_path}")
-            
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+            Intent = autoclass('android.content.Intent')
+            Settings = autoclass('android.provider.Settings')
+            Uri = autoclass('android.net.Uri')
+            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            uri = Uri.parse("package:" + activity.getPackageName())
+            intent.setData(uri)
+            activity.startActivity(intent)
+            self.lbl_count.text = 'Grant All files access'
+            return True
+        except Exception as e:
+            log_to_file(f"request permission fail: {e}")
+            return False
+
+    def open_csv_chooser_anywhere(self):
+        try:
+            start_path = "/storage/emulated/0"
+            try:
+                if not os.path.exists(start_path):
+                    start_path = "/storage/emulated/0/Download"
+            except:
+                start_path = APP_FOLDER
+            if not os.path.exists(start_path):
+                start_path = APP_FOLDER
             box = BoxLayout(orientation='vertical', spacing=5, padding=5)
-            
-            # File chooser - filter CSV
-            chooser = FileChooserListView(
-                path=start_path,
-                filters=['*.csv', '*.CSV', '*.txt'],
-                size_hint_y=0.85
-            )
+            chooser = FileChooserListView(path=start_path, filters=['*.csv', '*.CSV'], size_hint_y=0.85)
             box.add_widget(chooser)
-            
-            # Label to show current path
-            path_label = Label(
-                text=f'Path: {start_path}',
-                size_hint_y=None,
-                height=30,
-                font_size=11,
-                color=(0.3,0.3,0.3,1)
-            )
+            path_label = Label(text='Current: ' + start_path, size_hint_y=None, height=30, font_size=11)
             def update_path_label(instance, value):
-                path_label.text = f'Path: {value}'
+                path_label.text = 'Current: ' + value
             chooser.bind(path=update_path_label)
             box.add_widget(path_label)
-            
-            # Buttons row
             btn_row = BoxLayout(size_hint_y=None, height=60, spacing=8, padding=5)
             btn_cancel = Button(text='Cancel', background_color=(0.6,0.6,0.6,1), background_normal='', font_size=16)
+            btn_perm = Button(text='Grant Access', background_color=(0.2,0.6,1,1), background_normal='', font_size=11)
             btn_select = Button(text='Select CSV', background_color=get_color_from_hex(PRIMARY), background_normal='', bold=True, font_size=16)
             btn_row.add_widget(btn_cancel)
+            btn_row.add_widget(btn_perm)
             btn_row.add_widget(btn_select)
             box.add_widget(btn_row)
-            
-            popup = Popup(
-                title='Choose CSV File - Documents/Matrix-ICT',
-                content=box,
-                size_hint=(0.95, 0.9),
-                auto_dismiss=False
-            )
-            
+            popup = Popup(title='Import: Choose CSV from ANYWHERE', content=box, size_hint=(0.95, 0.92), auto_dismiss=False)
             def do_cancel(instance):
                 popup.dismiss()
-                log_to_file("CSV chooser cancelled")
-            
+            def do_perm(instance):
+                self.request_all_files_permission()
+                popup.dismiss()
             def do_select(instance):
                 try:
                     if chooser.selection:
                         selected = chooser.selection[0]
-                        log_to_file(f"CSV selected: {selected}")
                         popup.dismiss()
-                        self.do_import_file(selected)
+                        self.do_import_file_anywhere(selected)
                     else:
-                        # If no selection but in a dir with CSV, try auto
                         self.lbl_count.text = 'Select a file first'
                 except Exception as e:
                     log_to_file(f"Select error: {e}")
                     popup.dismiss()
-            
             btn_cancel.bind(on_press=do_cancel)
+            btn_perm.bind(on_press=do_perm)
             btn_select.bind(on_press=do_select)
-            # Double tap to select
             chooser.bind(on_submit=lambda instance, selection, touch: do_select(None) if selection else None)
-            
             popup.open()
-            
         except Exception as e:
-            log_to_file(f"Chooser crash: {e} {traceback.format_exc()}")
-            self.lbl_count.text = f'Chooser error: {e}'
-            # Fallback to old method
-            csv_path = find_csv()
-            if csv_path:
-                self.do_import_file(csv_path)
-            else:
-                self.lbl_count.text = 'No CSV found - put in Documents/Matrix-ICT'
+            log_to_file(f"Chooser import crash: {e} {traceback.format_exc()}")
+            self.lbl_count.text = 'Chooser error'
 
-    def do_import_file(self, csv_path):
-        # Core import logic - V21 - 5 POINTS: isolated, no side effects
+    def do_import_file_anywhere(self, csv_path):
         app = App.get_running_app()
-        log_to_file(f"Importing: {csv_path}")
-        if not csv_path or not os.path.exists(csv_path):
-            self.lbl_count.text = f'No CSV'
+        log_to_file(f"Importing from anywhere: {csv_path}")
+        if not csv_path:
+            self.lbl_count.text = 'No file selected'
             return
         try:
+            exists = os.path.exists(csv_path)
+        except PermissionError:
+            self.lbl_count.text = 'Permission denied'
+            self.open_csv_chooser_anywhere()
+            return
+        except Exception:
+            self.lbl_count.text = 'File error'
+            return
+        if not exists:
+            self.lbl_count.text = 'File not found'
+            return
+        try:
+            import shutil
+            private_copy = os.path.join(APP_FOLDER, "Matrix_Items_imported.csv")
+            csv_path_to_read = csv_path
+            try:
+                shutil.copy2(csv_path, private_copy)
+                csv_path_to_read = private_copy
+            except:
+                csv_path_to_read = csv_path
             conn=sqlite3.connect(app.DB)
             c=conn.cursor()
             bc=0
-            with open(csv_path,'r',encoding='utf-8',errors='ignore') as f:
+            with open(csv_path_to_read,'r',encoding='utf-8',errors='ignore') as f:
                 import csv
                 reader=csv.DictReader(f)
-                # Log headers for debug
-                try:
-                    log_to_file(f"CSV headers: {reader.fieldnames}")
-                except:
-                    pass
                 for row in reader:
-                    bcode=row.get('barcode') or row.get('Barcode') or row.get('BARCODE') or row.get('Barcod') or ''
+                    bcode=row.get('barcode') or row.get('Barcode') or row.get('BARCODE') or ''
                     bcode=str(bcode).strip()
-                    if not bcode: 
-                        # Try second column if barcode named differently
+                    if not bcode:
                         for k in row.keys():
                             if 'barcode' in k.lower() or 'barcod' in k.lower():
                                 bcode = str(row[k]).strip()
                                 break
                     if not bcode: continue
-                    try: 
-                        item_id=int(float(str(row.get('ItemID') or row.get('ItemId') or row.get('ID') or 0)))
+                    try:
+                        raw_id = row.get('ItemID') or row.get('ItemId') or row.get('ID') or 0
+                        item_id=int(float(str(raw_id).strip() or 0))
                         if item_id == 0:
                             continue
                     except: continue
-                    c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode','') or row.get('ItemCode',''),row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
-                    c.execute('INSERT OR IGNORE INTO Barcod VALUES (NULL,?,?)',(item_id,bcode))
-                    bc+=1
+                    try:
+                        c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode','') or '',row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
+                        c.execute('INSERT OR IGNORE INTO Barcod VALUES (NULL,?,?)',(item_id,bcode))
+                        bc+=1
+                    except:
+                        continue
             conn.commit()
             c.execute('SELECT count(*) FROM Items')
             app.db_count=c.fetchone()[0]
             conn.close()
             self.lbl_count.text=f'Imported {bc} | Total {app.db_count}'
-            self.lbl_status.text=f'File: {os.path.basename(csv_path)}'
-            log_to_file(f"Imported {bc} from {csv_path} | Total {app.db_count}")
+            self.lbl_status.text='File: ' + os.path.basename(csv_path)
+        except PermissionError:
+            self.lbl_count.text = 'Permission denied'
+            self.open_csv_chooser_anywhere()
         except Exception as e:
-            self.lbl_count.text=f'Err {e}'
+            self.lbl_count.text='Err ' + str(e)[:30]
             log_to_file(f"Import crash: {e} {traceback.format_exc()}")
 
     def export_txt(self, inst):
+        self.open_export_chooser_anywhere()
+
+    def open_export_chooser_anywhere(self):
+        try:
+            start_path = "/storage/emulated/0/Download"
+            try:
+                if not os.path.exists(start_path):
+                    start_path = "/storage/emulated/0"
+            except:
+                start_path = APP_FOLDER
+            if not os.path.exists(start_path):
+                start_path = APP_FOLDER
+            box = BoxLayout(orientation='vertical', spacing=5, padding=5)
+            chooser = FileChooserListView(path=start_path, size_hint_y=0.80)
+            chooser.filters = []
+            box.add_widget(chooser)
+            path_label = Label(text='Save to: ' + start_path, size_hint_y=None, height=30, font_size=11)
+            def update_path_label(instance, value):
+                path_label.text = 'Save to: ' + value
+            chooser.bind(path=update_path_label)
+            box.add_widget(path_label)
+            info = Label(text='Select FOLDER then Save', size_hint_y=None, height=25, font_size=10, color=(0,0.6,0,1))
+            box.add_widget(info)
+            btn_row = BoxLayout(size_hint_y=None, height=60, spacing=8, padding=5)
+            btn_cancel = Button(text='Cancel', background_color=(0.6,0.6,0.6,1), background_normal='', font_size=16)
+            btn_perm = Button(text='Grant Access', background_color=(0.2,0.6,1,1), background_normal='', font_size=11)
+            btn_save = Button(text='Save Here', background_color=get_color_from_hex(PRIMARY), background_normal='', bold=True, font_size=16)
+            btn_row.add_widget(btn_cancel)
+            btn_row.add_widget(btn_perm)
+            btn_row.add_widget(btn_save)
+            box.add_widget(btn_row)
+            popup = Popup(title='Export: Choose Folder to Save', content=box, size_hint=(0.95, 0.92), auto_dismiss=False)
+            def do_cancel(instance):
+                popup.dismiss()
+            def do_perm(instance):
+                self.request_all_files_permission()
+                popup.dismiss()
+            def do_save(instance):
+                try:
+                    save_dir = chooser.path
+                    if chooser.selection and os.path.isdir(chooser.selection[0]):
+                        save_dir = chooser.selection[0]
+                    elif chooser.selection and os.path.isfile(chooser.selection[0]):
+                        save_dir = os.path.dirname(chooser.selection[0])
+                    popup.dismiss()
+                    self.do_export_anywhere(save_dir)
+                except Exception as e:
+                    log_to_file(f"Export chooser error: {e}")
+                    popup.dismiss()
+            btn_cancel.bind(on_press=do_cancel)
+            btn_perm.bind(on_press=do_perm)
+            btn_save.bind(on_press=do_save)
+            popup.open()
+        except Exception as e:
+            log_to_file(f"Export chooser crash: {e} {traceback.format_exc()}")
+            self.lbl_count.text = 'Export chooser error'
+
+    def do_export_anywhere(self, save_dir):
         try:
             app = App.get_running_app()
             conn=sqlite3.connect(app.DB)
@@ -648,17 +665,46 @@ class BarcodeScreen(Screen):
             rows=c.fetchall()
             conn.close()
             if not rows:
-                self.lbl_count.text='No RFID'
+                self.lbl_count.text='No RFID to export'
                 return
-            fn=f"RFID_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            path=os.path.join(APP_FOLDER, fn)
-            with open(path,'w',encoding='utf-8') as f:
-                f.write("Itemcode | Description | RFID\n")
-                for r in rows: f.write(f"{r[0]} | {r[1]} | {r[2]}\n")
-            self.lbl_count.text=f'Exported {len(rows)}'
+            try:
+                if not os.path.exists(save_dir):
+                    save_dir = APP_FOLDER
+            except PermissionError:
+                save_dir = APP_FOLDER
+            except Exception:
+                save_dir = APP_FOLDER
+            fn="RFID_Export_" + datetime.now().strftime('%Y%m%d_%H%M%S') + ".txt"
+            path=os.path.join(save_dir, fn)
+            try:
+                with open(path,'w',encoding='utf-8') as f:
+                    f.write("Itemcode | Description | RFID" + chr(10))
+                    for r in rows:
+                        line = f"{r[0]} | {r[1]} | {r[2]}" + chr(10)
+                        f.write(line)
+                self.lbl_count.text=f'Exported {len(rows)}'
+                self.lbl_status.text='Saved: ' + path[-40:]
+            except PermissionError:
+                fallback_path=os.path.join(APP_FOLDER, fn)
+                with open(fallback_path,'w',encoding='utf-8') as f:
+                    f.write("Itemcode | Description | RFID" + chr(10))
+                    for r in rows:
+                        f.write(f"{r[0]} | {r[1]} | {r[2]}" + chr(10))
+                self.lbl_count.text=f'Exported {len(rows)} to private'
+                self.lbl_status.text='Permission denied, saved privately'
+                try:
+                    import shutil
+                    dl_path=os.path.join("/storage/emulated/0/Download", fn)
+                    shutil.copy2(fallback_path, dl_path)
+                    self.lbl_status.text='Saved to Download: ' + fn
+                except:
+                    pass
         except Exception as e:
-            log_to_file(f"Export crash: {e}")
+            self.lbl_count.text='Export Err ' + str(e)[:20]
+            log_to_file(f"Export crash: {e} {traceback.format_exc()}")
 
+
+    def show_log
     def show_log(self, inst):
         try:
             if os.path.exists(LOG_PATH):
