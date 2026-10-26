@@ -8,31 +8,24 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-pip zip unzip openjdk-17-jdk libffi-dev libssl-dev libltdl-dev autoconf automake libtool pkg-config zlib1g-dev
-
-      - name: Install Buildozer - FIX hostpython mismatch
+      - name: Install Buildozer
         run: |
           pip install --upgrade pip
-          # cython 0.29.36 لا يدعم Python 3.14 (hostpython3 3.14.2 في p4a master)
-          # نستخدم cython 3.0+ اللي يدعم 3.14
           pip install buildozer==1.5.0 cython==3.0.0
-
-      - name: Create clean buildozer.spec - FIX #56 hostpython mismatch
+      - name: Create clean buildozer.spec - FIX #57
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -43,9 +36,7 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas,json,jar
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
           version = 1.0
-          # FIX: لا نثبت python3==3.11.6 لانه يختلف عن hostpython3 الافتراضي 3.14.2 في p4a master
-          # نترك p4a يختار النسخة المتوافقة بنفسه
-          requirements = python3,kivy==2.3.1,pyjnius,requests
+          requirements = python3,kivy==2.3.1,pyjnius,requests==2.27.1
           orientation = portrait
           fullscreen = 0
           android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
@@ -61,23 +52,19 @@ jobs:
           EOF
           cat buildozer.spec
           cp 03_Libs_UHF_C72/reader.jar ./reader.jar || true
-
-      - name: Pre-clone p4a and clean SDK - FIX #50-#54
+      - name: Pre-clone p4a and clean SDK
         run: |
           rm -rf $HOME/.buildozer/android/platform/android-sdk
           rm -rf $HOME/.buildozer/android/platform/android-ndk-*
           rm -rf .buildozer/android/platform/python-for-android
           mkdir -p .buildozer/android/platform
           git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
-          echo "Cloned p4a master: $(cd .buildozer/android/platform/python-for-android && git log -1 --oneline)"
           sed -i 's/pip install -U pip/echo skip pip upgrade/g' .buildozer/android/platform/python-for-android/pythonforandroid/build.py
-
-      - name: Download SDK and FIX license BEFORE build - FIX #53 and #55
+      - name: Download SDK and FIX license
         run: |
           buildozer android debug --verbose 2>&1 | head -150 || true
           SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           NEW_MGR=$(find $SDK_DIR -name sdkmanager -type f 2>/dev/null | head -1)
-          echo "sdkmanager: $NEW_MGR"
           if [ -f "$NEW_MGR" ]; then
             chmod +x $NEW_MGR
             yes | $NEW_MGR --sdk_root=$SDK_DIR --licenses || true
@@ -87,14 +74,12 @@ jobs:
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
           echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
-
       - name: Build APK - FINAL
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
           ls -lh bin/
           find . -name "*.apk" | head -5
-
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,7 +89,6 @@ jobs:
             build.log
             .buildozer/logs/*
           if-no-files-found: warn
-
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
