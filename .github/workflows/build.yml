@@ -26,7 +26,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==3.0.0
 
-      - name: Create buildozer.spec - FIX #57 #60 - 5 POINTS
+      - name: Create buildozer.spec - V18 FIX BLANK SCREEN + 5 POINTS
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -34,28 +34,30 @@ jobs:
           package.name = matrixictrfid
           package.domain = com.matrixict.rfid
           source.dir = .
-          source.include_exts = py,png,jpg,kv,atlas,json,jar
+          source.include_exts = py,png,jpg,kv,atlas,json,jar,csv,db
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
+          source.exclude_patterns = build,bin,.buildozer,.git,*.log
           version = 1.0
-          # 5 POINTS FIX #57 #60: charset_normalizer wheel not supported
-          # Old fix requests==2.27.1 was not enough, p4a still pulls charset 3.5.2 platform wheel
-          # New fix: pin charset_normalizer to pure-python version + all deps
-          requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1
+          requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1,android
           orientation = portrait
           fullscreen = 0
-          android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
+          android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,VIBRATE
           android.api = 33
           android.minapi = 24
           android.ndk = 25b
           android.accept_sdk_license_agreement = True
           android.add_jars = reader.jar
+          android.add_src = 03_Libs_UHF_C72
           p4a.branch = master
+          android.logcat_filters = *:S python:D
+          android.logcat_pid_only = False
           [buildozer]
           log_level = 2
           warn_on_root = 1
           EOF
           cat buildozer.spec
           cp 03_Libs_UHF_C72/reader.jar ./reader.jar || true
+          ls -lh reader.jar 03_Libs_UHF_C72/ || true
 
       - name: Pre-clone p4a
         run: |
@@ -63,21 +65,16 @@ jobs:
           rm -rf $HOME/.buildozer/android/platform/android-ndk-*
           mkdir -p .buildozer/android/platform
           git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
-          echo "Cloned p4a"
-          find .buildozer/android/platform/python-for-android -name "*.py" -type f -exec grep -l "pip install -U pip" {} \; 2>/dev/null | head -5
           find .buildozer/android/platform/python-for-android -name "*.py" -type f -exec sed -i 's/pip install -U pip/echo skip pip upgrade/g' {} \; 2>/dev/null || true
-          echo "pip patch done"
 
       - name: Fix SDK paths
         run: |
           SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          echo "SDK_DIR $SDK_DIR"
           if [ ! -d "$SDK_DIR" ]; then
-            buildozer android debug --verbose 2>&1 | head -100 || true
+            buildozer android debug --verbose 2>&1 | head -50 || true
           fi
           NEW_MGR=$(find $SDK_DIR -name sdkmanager -type f 2>/dev/null | head -1)
           OLD_MGR=$SDK_DIR/tools/bin/sdkmanager
-          echo "NEW $NEW_MGR OLD $OLD_MGR"
           if [ -f "$NEW_MGR" ]; then
             mkdir -p $(dirname $OLD_MGR)
             ln -sf $NEW_MGR $OLD_MGR || true
@@ -89,14 +86,12 @@ jobs:
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
           echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
-          ls -lh $OLD_MGR $NEW_MGR || true
 
       - name: Build APK
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
           ls -lh bin/
-          find . -name "*.apk" | head -5
 
       - name: Upload logs
         if: always()
