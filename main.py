@@ -1,5 +1,5 @@
 
-# MATRIX ICT - V26 - V21 BASE + IMPORT/EXPORT ANYWHERE + UHF FIX - 5 POINTS
+# MATRIX ICT - V27 - V21 BASE + IMPORT/EXPORT ANYWHERE + UHF PHYSICAL BUTTON FIX - 5 POINTS
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
@@ -453,16 +453,34 @@ class BarcodeScreen(Screen):
         try:
             app = App.get_running_app()
             app.current_screen_name = 'barcode'
+            # V27 - 5 POINTS - Immediately close UHF and open Barcode - no delay for C72 switch
+            try:
+                if app.uhf_mgr.is_inventorying:
+                    app.uhf_mgr.stop_inventory()
+                if app.uhf_mgr.is_open:
+                    app.uhf_mgr.free()
+                log_to_file("V27 Barcode enter: UHF closed")
+            except Exception as e:
+                log_to_file(f"V27 Barcode enter UHF close fail: {e}")
+            
             def _setup(dt):
                 try:
                     app.uhf_mgr.free()
                     app.barcode_mgr.open()
+                    log_to_file("V27 BarcodeScreen on_enter OK - Barcode opened")
                 except Exception as e:
-                    log_to_file(f"on_enter fail: {e}")
+                    log_to_file(f"V27 on_enter fail: {e}")
+            # Open immediately + delayed backup
+            try:
+                app.barcode_mgr.open()
+            except:
+                pass
             Clock.schedule_once(_setup, 0.3)
             Clock.schedule_once(lambda dt: setattr(self.box_bc, 'focus', True), 0.5)
-            self.lbl_count.text=f'Items: {app.db_count} | V25'
+            self.lbl_count.text=f'Items: {app.db_count} | V27'
             self.update_btn()
+        except Exception as e:
+            log_to_file(f"V27 on_enter crash: {e} {traceback.format_exc()}")
         except Exception as e:
             log_to_file(f"on_enter crash: {e} {traceback.format_exc()}")
 
@@ -869,14 +887,34 @@ class RFIDScreen(Screen):
             self.lbl_desc.text=f'{app.curr_desc}'
             self.seen_set = set([t.upper().strip() for t in app.rfid_list])
             self.refresh()
-            log_to_file(f"RFID enter {app.curr_code}")
+            log_to_file(f"V27 RFID enter {app.curr_code} - CLOSING Barcode, OPENING UHF")
+            
+            # V27 - IMMEDIATELY close Barcode - C72 cannot have both
+            try:
+                app.barcode_mgr.close()
+                log_to_file("V27 RFID enter: Barcode closed immediately")
+            except Exception as e:
+                log_to_file(f"V27 RFID enter Barcode close fail: {e}")
+            
             def _open(dt):
                 try:
                     app.barcode_mgr.close()
-                    if app.uhf_mgr.has_g2: app.uhf_mgr.open()
+                    if app.uhf_mgr.has_g2: 
+                        app.uhf_mgr.open()
+                        log_to_file("V27 RFID _open: UHF opened")
+                    else:
+                        log_to_file(f"V27 RFID _open: No UHF SDK {app.uhf_mgr.sdk_version}")
                 except Exception as e:
-                    log_to_file(f"RFID _open err {e}")
-            Clock.schedule_once(_open, 0.3)
+                    log_to_file(f"V27 RFID _open err {e}")
+            # Immediate + delayed
+            try:
+                if app.uhf_mgr.has_g2:
+                    app.uhf_mgr.open()
+            except:
+                pass
+            Clock.schedule_once(_open, 0.2)
+        except Exception as e:
+            log_to_file(f"V27 RFID on_enter crash: {e} {traceback.format_exc()}")
         except Exception as e:
             log_to_file(f"RFID on_enter crash: {e} {traceback.format_exc()}")
 
@@ -1064,13 +1102,57 @@ class RFIDLinkApp(App):
 
     def on_hardware_key(self, window, key, scancode, codepoint, modifier):
         try:
-            log_to_file(f"KEY {key} screen={self.current_screen_name}")
-            SCAN_KEYS = [120,121,122,131,132,133,134,135,136,137,264,265,266,293,294,295,296,1001,1002,1003,1004,66,79,85]
+            log_to_file(f"V27 KEY {key} scancode={scancode} screen={self.current_screen_name}")
+            # V27 - C72 keys: 120-122 F1-F3, 131-137 scan keys, 264-266, 293-296, 1001-1004 custom
+            # Blue button is usually 131 or 134 or 120
+            SCAN_KEYS = [120,121,122,131,132,133,134,135,136,137,264,265,266,293,294,295,296,1001,1002,1003,1004,66,79,85, 103, 108,  134]
+            
             if self.current_screen_name == 'rfid':
-                if key in SCAN_KEYS or (100 <= key <= 160) or (290 <= key <= 310):
-                    try: self.root.get_screen('rfid').toggle_scan(None)
-                    except: pass
-                    return True
+                # V27 - In RFID screen, PHYSICAL BUTTON MUST trigger UHF, NOT Barcode
+                # Close Barcode immediately to prevent it from triggering
+                try:
+                    self.barcode_mgr.close()
+                except:
+                    pass
+                
+                # Trigger UHF for ANY scan key OR any key in range (to catch all C72 buttons)
+                # V27 fix: if in RFID screen, treat ALL scan-related keys as UHF trigger
+                if key in SCAN_KEYS or (100 <= key <= 160) or (290 <= key <= 310) or key in [134, 135, 131, 132, 120]:
+                    try: 
+                        self.root.get_screen('rfid').toggle_scan(None)
+                        log_to_file(f"V27 RFID physical button {key} -> toggle_scan UHF")
+                    except Exception as e:
+                        log_to_file(f"V27 RFID toggle fail {e}")
+                    return True  # Consume key - prevent Barcode from triggering
+                # Even if key not in list, if we're in RFID screen and it's a hardware key, consume it
+                # This prevents Barcode from activating in RFID screen
+                if scancode in [0, 1] or codepoint == '' or key > 0:
+                    # Likely a hardware scan button not in our list - still treat as UHF trigger
+                    # But only if it's a common scan trigger (not back/home)
+                    if key not in [4, 3, 82]:  # 4=back, 3=home, 82=menu
+                        try:
+                            self.root.get_screen('rfid').toggle_scan(None)
+                            log_to_file(f"V27 RFID unknown hardware key {key} -> UHF (prevent Barcode)")
+                        except:
+                            pass
+                        return True
+            
+            # In Barcode screen, let Barcode SDK handle it - don't consume
+            # But ensure Barcode is open and UHF closed
+            if self.current_screen_name == 'barcode':
+                if key in SCAN_KEYS:
+                    log_to_file(f"V27 Barcode physical button {key} -> Barcode")
+                    try:
+                        if not self.barcode_mgr.is_open:
+                            self.barcode_mgr.open()
+                    except:
+                        pass
+                    # Return False to let system/Barcode SDK handle it (focus TextInput)
+                    return False
+            
+            return False
+        except Exception as e:
+            log_to_file(f"V27 key crash {e} {traceback.format_exc()}")
             return False
         except Exception as e:
             log_to_file(f"key crash {e}")
