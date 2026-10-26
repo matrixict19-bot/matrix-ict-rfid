@@ -1,13 +1,16 @@
 
-# MATRIX ICT - V24 IMPORT+EXPORT ANYWHERE - 5 POINTS - No Matrix-ICT, pick from anywhere
+# MATRIX ICT - V25 - V21 BASE + IMPORT ANYWHERE + EXPORT ANYWHERE - 5 POINTS
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
 # Global crash catcher - writes even on Python crash
 def get_app_folder_safe():
+    # V25 - V21 BASE FIX 5 POINTS - private folder only, NO Download to avoid Permission Denied
     try:
         from android.storage import app_storage_path
-        return app_storage_path()
+        p = app_storage_path()
+        if p:
+            return p
     except:
         pass
     try:
@@ -68,8 +71,8 @@ PRIMARY = "#FF8C00"
 SECONDARY = "#2B2E33"
 
 def find_logo():
-    search_dirs = [APP_FOLDER, os.getcwd()]
-    for d in search_dirs:
+    # V25 - V21 BASE - search only private folder and cwd, NO Download
+    for d in [APP_FOLDER, os.getcwd()]:
         if not d:
             continue
         try:
@@ -110,9 +113,8 @@ def init_db(db_path):
         return 0
 
 def find_csv():
-    search_dirs = [APP_FOLDER, "/storage/emulated/0/Download", "/sdcard/Download", os.getcwd()]
-    csv_names = ["Matrix_Items.csv", "MATRIX_Items.csv", "matrix_items.csv", "items.csv"]
-    for d in search_dirs:
+    # V25 - 5 POINTS - DO NOT look at Download folder, only private + Download
+    for d in [APP_FOLDER, "/storage/emulated/0/Download", "/sdcard/Download", os.getcwd()]:
         if not d:
             continue
         try:
@@ -120,7 +122,7 @@ def find_csv():
                 continue
         except:
             continue
-        for name in csv_names:
+        for name in ["Matrix_Items.csv", "MATRIX_Items.csv", "matrix_items.csv", "items.csv"]:
             p = os.path.join(d, name)
             try:
                 if os.path.exists(p):
@@ -272,51 +274,41 @@ class BarcodeManager:
             return False
 
 
+
 class BarcodeScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._timer=None
         try:
             self.build_ui()
-            log_to_file("BarcodeScreen UI built")
+            log_to_file("BarcodeScreen V25 built - V21 base + Import/Export anywhere")
         except Exception as e:
             log_to_file(f"BarcodeScreen build FAIL: {e} {traceback.format_exc()}")
 
     def build_ui(self):
         root = BoxLayout(orientation='vertical', padding=0, spacing=0)
-        
-        # HEADER - SAFE LOGO LOAD
         header = BoxLayout(size_hint_y=None, height=70, padding=6, spacing=8)
         logo_path = find_logo()
         if logo_path:
             try:
                 from kivy.uix.image import Image
-                # Safe load with small size
                 img = Image(source=logo_path, size_hint_x=0.65, allow_stretch=True, keep_ratio=True)
                 header.add_widget(img)
-                header.add_widget(Label(text='[b][color=FF8C00]RFID V17[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
-                log_to_file(f"Logo loaded: {logo_path}")
-            except Exception as e:
-                log_to_file(f"Logo load fail {logo_path}: {e}")
-                header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V17[/b]', markup=True, font_size=18))
+                header.add_widget(Label(text='[b][color=FF8C00]RFID V25[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
+            except:
+                header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V25[/b]', markup=True, font_size=18))
         else:
-            header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V17[/b]', markup=True, font_size=18))
-        
+            header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V25[/b]', markup=True, font_size=18))
         root.add_widget(header)
-        
         body = BoxLayout(orientation='vertical', padding=8, spacing=5)
         body.add_widget(Label(text='SCAN BARCODE - Blue Button', size_hint_y=None, height=28, bold=True, color=get_color_from_hex(PRIMARY), font_size=16))
-        
         self.box_bc = TextInput(hint_text='Scan here...', multiline=False, size_hint_y=None, height=75, font_size=28)
         self.box_bc.bind(text=self.on_text_change)
         self.box_bc.bind(on_text_validate=self.do_scan)
         body.add_widget(self.box_bc)
-        
-        # CARD - SAFE, NO CANVAS
         self.card = make_safe_card()
         self.card.size_hint_y = 1
         self.card.height = 300
-        
         self.lbl_lookup = Label(text='Code: -', size_hint_y=None, height=60, color=(0,0,0,1), font_size=32, bold=True, halign='left')
         self.lbl_lookup.bind(size=self.lbl_lookup.setter('text_size'))
         self.lbl_desc = Label(text='Description: -', size_hint_y=None, height=60, color=(0.15,0.15,0.15,1), font_size=22, bold=True, halign='left')
@@ -327,21 +319,16 @@ class BarcodeScreen(Screen):
         self.lbl_sub2.bind(size=self.lbl_sub2.setter('text_size'))
         self.lbl_sub3 = Label(text='Sub3: -', size_hint_y=None, height=40, color=(0.3,0.3,0.3,1), font_size=18, halign='left')
         self.lbl_sub3.bind(size=self.lbl_sub3.setter('text_size'))
-        
         for w in [self.lbl_lookup, self.lbl_desc, self.lbl_sub1, self.lbl_sub2, self.lbl_sub3]:
             self.card.add_widget(w)
-        
         body.add_widget(self.card)
-        
-        self.lbl_status = Label(text=f'Folder: {APP_FOLDER[-30:]}', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=10)
+        self.lbl_status = Label(text='Folder: ' + APP_FOLDER[-30:], size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=10)
         body.add_widget(self.lbl_status)
-        self.lbl_count = Label(text='Ready', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=14)
+        self.lbl_count = Label(text='Ready V25 - V21 base', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=14)
         body.add_widget(self.lbl_count)
-        
         self.btn_go_rfid = Button(text='Scan item first', size_hint_y=None, height=75, background_color=(0.6,0.6,0.6,1), background_normal='', bold=True, font_size=22, disabled=True)
         self.btn_go_rfid.bind(on_press=self.go_to_rfid)
         body.add_widget(self.btn_go_rfid)
-        
         row = BoxLayout(size_hint_y=None, height=60, spacing=6)
         b1 = Button(text='Import', background_color=(0,0.6,0,1), background_normal='', font_size=16, bold=True)
         b2 = Button(text='Export', background_color=get_color_from_hex(SECONDARY), background_normal='', font_size=16, bold=True)
@@ -353,7 +340,6 @@ class BarcodeScreen(Screen):
         row.add_widget(b2)
         row.add_widget(b3)
         body.add_widget(row)
-        
         root.add_widget(body)
         self.add_widget(root)
 
@@ -365,12 +351,11 @@ class BarcodeScreen(Screen):
                 try:
                     app.uhf_mgr.free()
                     app.barcode_mgr.open()
-                    log_to_file("BarcodeScreen on_enter OK")
                 except Exception as e:
                     log_to_file(f"on_enter fail: {e}")
             Clock.schedule_once(_setup, 0.3)
             Clock.schedule_once(lambda dt: setattr(self.box_bc, 'focus', True), 0.5)
-            self.lbl_count.text=f'Items: {app.db_count} | Log OK'
+            self.lbl_count.text=f'Items: {app.db_count} | V25'
             self.update_btn()
         except Exception as e:
             log_to_file(f"on_enter crash: {e} {traceback.format_exc()}")
@@ -420,12 +405,10 @@ class BarcodeScreen(Screen):
                 inst.text=''
                 self.lbl_count.text=f'Found: {row[1]}'
                 self.lbl_count.color=(0,0.6,0,1)
-                log_to_file(f"Found {row[1]}")
                 self.update_btn()
             else:
                 self.lbl_count.text=f'Not found: {code}'
                 self.lbl_count.color=(1,0,0,1)
-                log_to_file(f"Not found {code}")
                 inst.text=''
         except Exception as e:
             self.lbl_count.text=f'Error: {e}'
@@ -451,14 +434,13 @@ class BarcodeScreen(Screen):
             if not app.curr_id: return
             app.barcode_mgr.close()
             self.box_bc.focus=False
-            log_to_file(f"Go RFID {app.curr_code}")
             self.manager.transition=SlideTransition(direction='left')
             self.manager.current='rfid'
         except Exception as e:
             log_to_file(f"go_to_rfid crash: {e} {traceback.format_exc()}")
 
-
     def import_csv(self, inst):
+        # V25 - V21 BASE - 5 POINTS - Import from anywhere
         self.open_csv_chooser_anywhere()
 
     def request_all_files_permission(self):
@@ -480,6 +462,7 @@ class BarcodeScreen(Screen):
             return False
 
     def open_csv_chooser_anywhere(self):
+        # V25 - Import: Choose CSV from ANYWHERE - V21 base stable
         try:
             start_path = "/storage/emulated/0"
             try:
@@ -532,8 +515,9 @@ class BarcodeScreen(Screen):
             self.lbl_count.text = 'Chooser error'
 
     def do_import_file_anywhere(self, csv_path):
+        # V25 - 5 POINTS isolated, no side effects
         app = App.get_running_app()
-        log_to_file(f"Importing from anywhere: {csv_path}")
+        log_to_file(f"Importing anywhere: {csv_path}")
         if not csv_path:
             self.lbl_count.text = 'No file selected'
             return
@@ -599,9 +583,11 @@ class BarcodeScreen(Screen):
             log_to_file(f"Import crash: {e} {traceback.format_exc()}")
 
     def export_txt(self, inst):
+        # V25 - Export: Choose save location anywhere
         self.open_export_chooser_anywhere()
 
     def open_export_chooser_anywhere(self):
+        # V25 - Export chooser - V21 base + anywhere
         try:
             start_path = "/storage/emulated/0/Download"
             try:
@@ -657,6 +643,7 @@ class BarcodeScreen(Screen):
             self.lbl_count.text = 'Export chooser error'
 
     def do_export_anywhere(self, save_dir):
+        # V25 - 5 POINTS isolated
         try:
             app = App.get_running_app()
             conn=sqlite3.connect(app.DB)
@@ -670,9 +657,7 @@ class BarcodeScreen(Screen):
             try:
                 if not os.path.exists(save_dir):
                     save_dir = APP_FOLDER
-            except PermissionError:
-                save_dir = APP_FOLDER
-            except Exception:
+            except:
                 save_dir = APP_FOLDER
             fn="RFID_Export_" + datetime.now().strftime('%Y%m%d_%H%M%S') + ".txt"
             path=os.path.join(save_dir, fn)
@@ -680,8 +665,7 @@ class BarcodeScreen(Screen):
                 with open(path,'w',encoding='utf-8') as f:
                     f.write("Itemcode | Description | RFID" + chr(10))
                     for r in rows:
-                        line = f"{r[0]} | {r[1]} | {r[2]}" + chr(10)
-                        f.write(line)
+                        f.write(f"{r[0]} | {r[1]} | {r[2]}" + chr(10))
                 self.lbl_count.text=f'Exported {len(rows)}'
                 self.lbl_status.text='Saved: ' + path[-40:]
             except PermissionError:
@@ -703,8 +687,6 @@ class BarcodeScreen(Screen):
             self.lbl_count.text='Export Err ' + str(e)[:20]
             log_to_file(f"Export crash: {e} {traceback.format_exc()}")
 
-
-    def show_log
     def show_log(self, inst):
         try:
             if os.path.exists(LOG_PATH):
@@ -712,6 +694,7 @@ class BarcodeScreen(Screen):
                     content = f.read()[-300:]
                 self.lbl_status.text = content[-60:]
         except: pass
+
 
 class RFIDScreen(Screen):
     def __init__(self, **kwargs):
