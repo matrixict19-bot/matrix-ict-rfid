@@ -1,5 +1,5 @@
 
-# MATRIX ICT - V19 FIX BLANK SCREEN - 5 POINTS - make_safe_card + safe folder - Crash Catcher + Safe Logo + No Canvas Crash
+# MATRIX ICT - V21 FILE CHOOSER + 5 POINTS - Import picker - 5 POINTS - make_safe_card + safe folder - Crash Catcher + Safe Logo + No Canvas Crash
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
@@ -69,16 +69,29 @@ from kivy.core.window import Window
 from kivy.utils import get_color_from_hex
 from kivy.clock import Clock
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
+from kivy.uix.filechooser import FileChooserListView
+from kivy.uix.popup import Popup
 
 BG = "#F5F5F5"
 PRIMARY = "#FF8C00"
 SECONDARY = "#2B2E33"
 
 def find_logo():
-    for name in ["logo.png", "logo_header.png"]:
-        p = os.path.join(APP_FOLDER, name)
-        if os.path.exists(p):
-            return p
+    search_dirs = [
+        APP_FOLDER,
+        "/storage/emulated/0/Documents/Matrix-ICT",
+        "/sdcard/Documents/Matrix-ICT",
+        os.getcwd()
+    ]
+    for d in search_dirs:
+        if not d: continue
+        for name in ["logo.png", "logo_header.png", "icon.png"]:
+            p = os.path.join(d, name)
+            try:
+                if os.path.exists(p):
+                    return p
+            except:
+                pass
     return None
 
 def make_safe_card():
@@ -105,9 +118,37 @@ def init_db(db_path):
         return 0
 
 def find_csv():
-    for p in [os.path.join(APP_FOLDER, "Matrix_Items.csv"), os.path.join(APP_FOLDER, "MATRIX_Items.csv")]:
-        if os.path.exists(p):
-            return p
+    # V20 FIX - 5 POINTS: search in ALL locations (private + Documents)
+    search_dirs = [
+        APP_FOLDER,
+        "/storage/emulated/0/Documents/Matrix-ICT",
+        "/sdcard/Documents/Matrix-ICT",
+        "/storage/emulated/0/Download",
+        os.getcwd(),
+        os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else ""
+    ]
+    csv_names = ["Matrix_Items.csv", "MATRIX_Items.csv", "matrix_items.csv", "Matrix_ICT.csv", "items.csv"]
+    for d in search_dirs:
+        if not d: continue
+        for name in csv_names:
+            p = os.path.join(d, name)
+            try:
+                if os.path.exists(p):
+                    log_to_file(f"CSV found: {p}")
+                    return p
+            except:
+                pass
+    # also check if file in Documents with different case
+    for d in search_dirs:
+        try:
+            if os.path.exists(d):
+                for fn in os.listdir(d):
+                    if fn.lower().endswith('.csv'):
+                        p = os.path.join(d, fn)
+                        log_to_file(f"CSV found by scan: {p}")
+                        return p
+        except:
+            pass
     return None
 
 class UHFManager_G2_Real:
@@ -439,11 +480,123 @@ class BarcodeScreen(Screen):
             log_to_file(f"go_to_rfid crash: {e} {traceback.format_exc()}")
 
     def import_csv(self, inst):
+        # V21 - 5 POINTS: file chooser so client can pick CSV from device - no impact on other ops
+        try:
+            # Try auto-find first for quick import, but also show chooser if not found
+            auto_path = find_csv()
+            if auto_path and os.path.exists(auto_path):
+                # If auto found, import directly (backward compatible)
+                self.do_import_file(auto_path)
+                # Also show where it was found
+                self.lbl_status.text = f"Auto: {os.path.basename(auto_path)}"
+                return
+        except:
+            pass
+        # Open file chooser
+        self.open_csv_chooser()
+
+    def open_csv_chooser(self):
+        # V21 - File chooser popup - client picks CSV from device
+        try:
+            # Determine start path - 5 POINTS: check Documents first (where client has files)
+            start_paths = [
+                "/storage/emulated/0/Documents/Matrix-ICT",
+                "/storage/emulated/0/Documents",
+                "/storage/emulated/0/Download",
+                "/sdcard/Documents/Matrix-ICT",
+                APP_FOLDER,
+                "/storage/emulated/0"
+            ]
+            start_path = APP_FOLDER
+            for p in start_paths:
+                try:
+                    if os.path.exists(p):
+                        start_path = p
+                        break
+                except:
+                    pass
+            
+            log_to_file(f"Chooser start: {start_path}")
+            
+            box = BoxLayout(orientation='vertical', spacing=5, padding=5)
+            
+            # File chooser - filter CSV
+            chooser = FileChooserListView(
+                path=start_path,
+                filters=['*.csv', '*.CSV', '*.txt'],
+                size_hint_y=0.85
+            )
+            box.add_widget(chooser)
+            
+            # Label to show current path
+            path_label = Label(
+                text=f'Path: {start_path}',
+                size_hint_y=None,
+                height=30,
+                font_size=11,
+                color=(0.3,0.3,0.3,1)
+            )
+            def update_path_label(instance, value):
+                path_label.text = f'Path: {value}'
+            chooser.bind(path=update_path_label)
+            box.add_widget(path_label)
+            
+            # Buttons row
+            btn_row = BoxLayout(size_hint_y=None, height=60, spacing=8, padding=5)
+            btn_cancel = Button(text='Cancel', background_color=(0.6,0.6,0.6,1), background_normal='', font_size=16)
+            btn_select = Button(text='Select CSV', background_color=get_color_from_hex(PRIMARY), background_normal='', bold=True, font_size=16)
+            btn_row.add_widget(btn_cancel)
+            btn_row.add_widget(btn_select)
+            box.add_widget(btn_row)
+            
+            popup = Popup(
+                title='Choose CSV File - Documents/Matrix-ICT',
+                content=box,
+                size_hint=(0.95, 0.9),
+                auto_dismiss=False
+            )
+            
+            def do_cancel(instance):
+                popup.dismiss()
+                log_to_file("CSV chooser cancelled")
+            
+            def do_select(instance):
+                try:
+                    if chooser.selection:
+                        selected = chooser.selection[0]
+                        log_to_file(f"CSV selected: {selected}")
+                        popup.dismiss()
+                        self.do_import_file(selected)
+                    else:
+                        # If no selection but in a dir with CSV, try auto
+                        self.lbl_count.text = 'Select a file first'
+                except Exception as e:
+                    log_to_file(f"Select error: {e}")
+                    popup.dismiss()
+            
+            btn_cancel.bind(on_press=do_cancel)
+            btn_select.bind(on_press=do_select)
+            # Double tap to select
+            chooser.bind(on_submit=lambda instance, selection, touch: do_select(None) if selection else None)
+            
+            popup.open()
+            
+        except Exception as e:
+            log_to_file(f"Chooser crash: {e} {traceback.format_exc()}")
+            self.lbl_count.text = f'Chooser error: {e}'
+            # Fallback to old method
+            csv_path = find_csv()
+            if csv_path:
+                self.do_import_file(csv_path)
+            else:
+                self.lbl_count.text = 'No CSV found - put in Documents/Matrix-ICT'
+
+    def do_import_file(self, csv_path):
+        # Core import logic - V21 - 5 POINTS: isolated, no side effects
         app = App.get_running_app()
-        csv_path = find_csv()
-        log_to_file(f"Import {csv_path}")
-        if not csv_path:
-            self.lbl_count.text=f'No CSV'
+        log_to_file(f"Importing: {csv_path}")
+        if not csv_path or not os.path.exists(csv_path):
+            self.lbl_count.text = f'No CSV'
             return
         try:
             conn=sqlite3.connect(app.DB)
@@ -452,13 +605,27 @@ class BarcodeScreen(Screen):
             with open(csv_path,'r',encoding='utf-8',errors='ignore') as f:
                 import csv
                 reader=csv.DictReader(f)
+                # Log headers for debug
+                try:
+                    log_to_file(f"CSV headers: {reader.fieldnames}")
+                except:
+                    pass
                 for row in reader:
-                    bcode=row.get('barcode') or row.get('Barcode') or ''
+                    bcode=row.get('barcode') or row.get('Barcode') or row.get('BARCODE') or row.get('Barcod') or ''
                     bcode=str(bcode).strip()
+                    if not bcode: 
+                        # Try second column if barcode named differently
+                        for k in row.keys():
+                            if 'barcode' in k.lower() or 'barcod' in k.lower():
+                                bcode = str(row[k]).strip()
+                                break
                     if not bcode: continue
-                    try: item_id=int(row['ItemID'] or row['ItemId'])
+                    try: 
+                        item_id=int(float(str(row.get('ItemID') or row.get('ItemId') or row.get('ID') or 0)))
+                        if item_id == 0:
+                            continue
                     except: continue
-                    c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode',''),row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
+                    c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode','') or row.get('ItemCode',''),row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
                     c.execute('INSERT OR IGNORE INTO Barcod VALUES (NULL,?,?)',(item_id,bcode))
                     bc+=1
             conn.commit()
@@ -466,7 +633,8 @@ class BarcodeScreen(Screen):
             app.db_count=c.fetchone()[0]
             conn.close()
             self.lbl_count.text=f'Imported {bc} | Total {app.db_count}'
-            log_to_file(f"Imported {bc}")
+            self.lbl_status.text=f'File: {os.path.basename(csv_path)}'
+            log_to_file(f"Imported {bc} from {csv_path} | Total {app.db_count}")
         except Exception as e:
             self.lbl_count.text=f'Err {e}'
             log_to_file(f"Import crash: {e} {traceback.format_exc()}")
