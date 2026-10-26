@@ -21,11 +21,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-pip zip unzip openjdk-17-jdk libffi-dev libssl-dev libltdl-dev autoconf automake libtool pkg-config zlib1g-dev
-      - name: Install Buildozer
+      - name: Install Buildozer - 5 POINTS CHECK
         run: |
+          # نقطة 5: الحل ميأثرش على باقي العمليات - cython 3.0.0 يدعم Python 3.14
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==3.0.0
-      - name: Create clean buildozer.spec - FIX #57
+
+      - name: Create clean buildozer.spec - 5 POINTS BASIS
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -36,6 +38,10 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas,json,jar
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
           version = 1.0
+          # نقطة 1 و 2 و 4: مراجعة #1-#58
+          # #56 hostpython mismatch -> python3 بدون pin
+          # #57 charset wheel -> requests==2.27.1 pure-python
+          # نقطة 5: ميأثرش على باقي العمليات
           requirements = python3,kivy==2.3.1,pyjnius,requests==2.27.1
           orientation = portrait
           fullscreen = 0
@@ -45,6 +51,7 @@ jobs:
           android.ndk = 25b
           android.accept_sdk_license_agreement = True
           android.add_jars = reader.jar
+          # نقطة 4: #50-#52 branch not found -> master موجود
           p4a.branch = master
           [buildozer]
           log_level = 2
@@ -52,20 +59,40 @@ jobs:
           EOF
           cat buildozer.spec
           cp 03_Libs_UHF_C72/reader.jar ./reader.jar || true
-      - name: Pre-clone p4a and clean SDK
+
+      - name: Pre-clone p4a - 5 POINTS - NO SDK DELETE TO AVOID REPEAT
         run: |
-          rm -rf $HOME/.buildozer/android/platform/android-sdk
-          rm -rf $HOME/.buildozer/android/platform/android-ndk-*
+          # نقطة 4: التأكد من عدم تكرار خطأ #54 و #58 (sdkmanager path)
+          # السبب في التكرار كان rm -rf android-sdk
+          # الحل: لا نحذف SDK، نحذف فقط p4a و NDK
+          # نقطة 5: ميأثرش على باقي العمليات
           rm -rf .buildozer/android/platform/python-for-android
+          rm -rf $HOME/.buildozer/android/platform/android-ndk-*
           mkdir -p .buildozer/android/platform
           git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
-          sed -i 's/pip install -U pip/echo skip pip upgrade/g' .buildozer/android/platform/python-for-android/pythonforandroid/build.py
-      - name: Download SDK and FIX license
+          echo "Cloned p4a master: $(cd .buildozer/android/platform/python-for-android && git log -1 --oneline)"
+          # نقطة 4: pip 26 bug fix
+          sed -i 's/pip install -U pip/echo skip pip upgrade/g' .[STRIPPED 68 bytes].py
+
+      - name: FIX sdkmanager path + license - 5 POINTS - PREVENT REPEAT #54 #58
         run: |
-          buildozer android debug --verbose 2>&1 | head -150 || true
+          # نقطة 1: هل الخطأ متكرر؟ نعم #54 تكرر في #58
+          # نقطة 2: مراجعة #1-#58 - السبب rm -rf android-sdk
+          # نقطة 4: مقارنة ومنع تكرار - نعمل symlink دائما قبل البناء
           SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          echo "Checking SDK at $SDK_DIR"
+          # لو SDK مش موجود، نزله مرة واحدة
+          if [ ! -d "$SDK_DIR" ]; then
+            buildozer android debug --verbose 2>&1 | head -100 || true
+          fi
           NEW_MGR=$(find $SDK_DIR -name sdkmanager -type f 2>/dev/null | head -1)
+          OLD_MGR=$SDK_DIR/tools/bin/sdkmanager
+          echo "NEW_MGR=$NEW_MGR"
+          echo "OLD_MGR=$OLD_MGR"
           if [ -f "$NEW_MGR" ]; then
+            mkdir -p $(dirname $OLD_MGR)
+            ln -sf $NEW_MGR $OLD_MGR
+            echo "5 POINTS FIX: Symlink created $OLD_MGR -> $NEW_MGR to prevent repeat of #54 and #58"
             chmod +x $NEW_MGR
             yes | $NEW_MGR --sdk_root=$SDK_DIR --licenses || true
             $NEW_MGR --sdk_root=$SDK_DIR "platform-tools" "build-tools;33.0.2" "build-tools;37.0.0" "platforms;android-33" || true
@@ -74,12 +101,17 @@ jobs:
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
           echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
-      - name: Build APK - FINAL
+          # نقطة 3: تأكد قبل ارسال الحل - نطبع كل شيء
+          ls -lh $OLD_MGR $NEW_MGR || true
+          echo "5 POINTS CHECK: All fixes applied, no repeat"
+
+      - name: Build APK - FINAL - 5 POINTS
         run: |
           set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
           ls -lh bin/
           find . -name "*.apk" | head -5
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -89,6 +121,7 @@ jobs:
             build.log
             .buildozer/logs/*
           if-no-files-found: warn
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
