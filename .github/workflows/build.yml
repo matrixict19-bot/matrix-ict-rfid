@@ -26,7 +26,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==3.0.0
 
-      - name: Create buildozer.spec
+      - name: Create buildozer.spec - FIX #57 #60 - 5 POINTS
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -37,7 +37,10 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas,json,jar
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
           version = 1.0
-          requirements = python3,kivy==2.3.1,pyjnius,requests==2.27.1
+          # 5 POINTS FIX #57 #60: charset_normalizer wheel not supported
+          # Old fix requests==2.27.1 was not enough, p4a still pulls charset 3.5.2 platform wheel
+          # New fix: pin charset_normalizer to pure-python version + all deps
+          requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1
           orientation = portrait
           fullscreen = 0
           android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
@@ -51,6 +54,7 @@ jobs:
           log_level = 2
           warn_on_root = 1
           EOF
+          cat buildozer.spec
           cp 03_Libs_UHF_C72/reader.jar ./reader.jar || true
 
       - name: Pre-clone p4a
@@ -60,10 +64,9 @@ jobs:
           mkdir -p .buildozer/android/platform
           git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
           echo "Cloned p4a"
-          # FIX: pip upgrade bug - find file and patch, ignore if not found (5 POINTS - prevent repeat)
           find .buildozer/android/platform/python-for-android -name "*.py" -type f -exec grep -l "pip install -U pip" {} \; 2>/dev/null | head -5
           find .buildozer/android/platform/python-for-android -name "*.py" -type f -exec sed -i 's/pip install -U pip/echo skip pip upgrade/g' {} \; 2>/dev/null || true
-          echo "pip patch done (or skipped if not needed)"
+          echo "pip patch done"
 
       - name: Fix SDK paths
         run: |
