@@ -1,5 +1,5 @@
 
-# MATRIX ICT - V25 - V21 BASE + IMPORT ANYWHERE + EXPORT ANYWHERE - 5 POINTS
+# MATRIX ICT - V26 - V21 BASE + IMPORT/EXPORT ANYWHERE + UHF FIX - 5 POINTS
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
@@ -137,50 +137,156 @@ class UHFManager_G2_Real:
         self.has_g2 = False
         self.is_inventorying = False
         self.is_open = False
+        self.sdk_version = "unknown"
         try:
             from jnius import autoclass
-            for cls_name in ['com.rscja.deviceapi.RFIDWithUHFUART', 'com.rscja.deviceapi.RFIDWithUHF']:
+            # V26 - 5 POINTS - Try all possible C72 SDK class names
+            possible_classes = [
+                'com.rscja.deviceapi.RFIDWithUHFUART',
+                'com.rscja.deviceapi.RFIDWithUHF',
+                'com.rscja.deviceapi.RFIDWithUHFUHF',
+                'com.rscja.deviceapi.RFIDWithUHFUHFUART'
+            ]
+            for cls_name in possible_classes:
                 try:
                     Clz = autoclass(cls_name)
                     self.client = Clz.getInstance()
                     self.has_g2 = True
-                    log_to_file(f"UHF: {cls_name}")
+                    self.sdk_version = cls_name
+                    log_to_file(f"UHF SDK FOUND: {cls_name}")
                     break
-                except: continue
+                except Exception as e:
+                    log_to_file(f"UHF try {cls_name} fail: {e}")
+                    continue
+            
+            if not self.has_g2:
+                log_to_file("UHF SDK NOT FOUND - will use fake mode")
         except Exception as e:
-            log_to_file(f"UHF fail: {e}")
+            log_to_file(f"UHF init crash: {e} {traceback.format_exc()}")
             self.has_g2 = False
 
     def open(self): 
-        if not self.has_g2: return False
+        if not self.has_g2: 
+            log_to_file("UHF open: no G2 SDK, fake mode")
+            return False
         try: 
-            self.client.init()
+            # V26 - Try init with and without context
+            try:
+                self.client.init()
+                log_to_file("UHF init() OK")
+            except Exception as e1:
+                log_to_file(f"UHF init() fail: {e1}, trying init(context)")
+                try:
+                    from jnius import autoclass
+                    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                    activity = PythonActivity.mActivity
+                    self.client.init(activity)
+                    log_to_file("UHF init(activity) OK")
+                except Exception as e2:
+                    log_to_file(f"UHF init(activity) fail: {e2}")
+                    # Still try to continue
+                    pass
+            
+            # Try to set power to max (30 dBm) - C72 specific
+            try:
+                self.client.setPower(30)
+                log_to_file("UHF setPower 30 OK")
+            except Exception as e:
+                log_to_file(f"UHF setPower fail (normal): {e}")
+            
+            # Try to set frequency to default
+            try:
+                # 0 = default region
+                self.client.setFrequencyMode(0)
+                log_to_file("UHF setFrequencyMode OK")
+            except Exception as e:
+                log_to_file(f"UHF setFrequency fail (normal): {e}")
+
             self.is_open = True
-            log_to_file("UHF opened")
+            log_to_file("UHF opened SUCCESS")
             return True
         except Exception as e:
-            log_to_file(f"UHF open fail: {e}")
+            log_to_file(f"UHF open fail: {e} {traceback.format_exc()}")
             return False
+
     def start_inventory(self):
-        if not self.has_g2: return False
-        try: self.client.startInventoryTag(); self.is_inventorying=True; log_to_file("UHF inventory start"); return True
-        except Exception as e: log_to_file(f"UHF start fail: {e}"); return False
+        if not self.has_g2: 
+            log_to_file("UHF start: no G2, fake")
+            return False
+        try: 
+            self.client.startInventoryTag()
+            self.is_inventorying=True
+            log_to_file("UHF inventory START OK")
+            return True
+        except Exception as e: 
+            log_to_file(f"UHF start fail: {e} {traceback.format_exc()}")
+            return False
+
     def stop_inventory(self):
-        try: self.client.stopInventory(); self.is_inventorying=False; log_to_file("UHF inventory stop"); return True
-        except: return False
+        try: 
+            if self.has_g2 and self.client:
+                self.client.stopInventory()
+            self.is_inventorying=False
+            log_to_file("UHF inventory STOP")
+            return True
+        except Exception as e:
+            log_to_file(f"UHF stop fail: {e}")
+            self.is_inventorying=False
+            return False
+
     def free(self):
         try: 
-            if self.is_inventorying:
-                self.client.stopInventory()
+            if self.is_inventorying and self.has_g2 and self.client:
+                try:
+                    self.client.stopInventory()
+                except:
+                    pass
                 self.is_inventorying=False
-            self.client.free()
+            if self.has_g2 and self.client:
+                try:
+                    self.client.free()
+                except:
+                    pass
             self.is_open=False
             log_to_file("UHF freed")
             return True
-        except: return False
+        except Exception as e:
+            log_to_file(f"UHF free fail: {e}")
+            self.is_open=False
+            return False
+
     def read_tags(self):
         tags=[]
-        if not self.has_g2: return tags
+        if not self.has_g2: 
+            return tags
+        try:
+            result = self.client.readTagFromBuffer()
+            if result:
+                for tag in result:
+                    try:
+                        # Try different methods to get EPC
+                        epc = None
+                        if hasattr(tag,'getEPC'):
+                            epc = tag.getEPC()
+                        elif hasattr(tag,'getEpc'):
+                            epc = tag.getEpc()
+                        else:
+                            epc = str(tag)
+                        
+                        if epc:
+                            epc = str(epc).strip().upper()
+                            # Clean EPC - remove spaces
+                            epc = epc.replace(" ", "")
+                            if epc and len(epc) >= 8:
+                                tags.append(epc)
+                    except Exception as te:
+                        log_to_file(f"UHF parse tag fail: {te}")
+                        pass
+                if tags:
+                    log_to_file(f"UHF read {len(tags)} tags: {tags[:3]}")
+        except Exception as e:
+            log_to_file(f"UHF readTagFromBuffer fail: {e}")
+        return tags
         try:
             result = self.client.readTagFromBuffer()
             if result:
@@ -715,9 +821,9 @@ class RFIDScreen(Screen):
                 header.add_widget(Image(source=logo_path, size_hint_x=0.65, allow_stretch=True, keep_ratio=True))
                 header.add_widget(Label(text='[b][color=FF8C00]V16[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
             except:
-                header.add_widget(Label(text='[b]MATRIX ICT RFID V17[/b]', markup=True, font_size=16))
+                header.add_widget(Label(text='[b]MATRIX ICT RFID V26[/b]', markup=True, font_size=16))
         else:
-            header.add_widget(Label(text='[b]MATRIX ICT RFID V17[/b]', markup=True, font_size=16))
+            header.add_widget(Label(text='[b]MATRIX ICT RFID V26[/b]', markup=True, font_size=16))
         root.add_widget(header)
         body=BoxLayout(orientation='vertical',padding=8,spacing=5)
         self.lbl_item=Label(text='Item: -', size_hint_y=None,height=60,bold=True,color=get_color_from_hex(PRIMARY), font_size=28)
@@ -846,24 +952,47 @@ class RFIDScreen(Screen):
     def toggle_scan(self, inst):
         try:
             app=App.get_running_app()
+            # V26 - Show UHF SDK status
             if not app.uhf_mgr.has_g2:
+                log_to_file(f"UHF has_g2=False, SDK={app.uhf_mgr.sdk_version} - FAKE mode")
+                self.lbl_status.text = f"No UHF SDK ({app.uhf_mgr.sdk_version}) - Fake mode"
                 fake = f"E28011{random.randint(0,999):03d}{datetime.now().strftime('%H%M%S')}{random.randint(10,99)}"
                 if self.add_tag_unique(fake):
                     self.refresh()
-                    self.counter.text=f'Count: {len(app.rfid_list)} (Fake)'
+                    self.counter.text=f'Count: {len(app.rfid_list)} (Fake - No SDK)'
                 return
+            
+            log_to_file(f"UHF toggle: has_g2=True, is_open={app.uhf_mgr.is_open}, is_inventorying={app.uhf_mgr.is_inventorying}")
+            
             if app.uhf_mgr.is_inventorying:
                 app.uhf_mgr.stop_inventory()
                 Clock.unschedule(self.poll)
                 self.btn_scan.text='START UHF (Blue)'
                 self.btn_scan.background_color=(0.15,0.5,0.9,1)
+                self.lbl_status.text = 'UHF Stopped'
+                log_to_file("UHF toggled STOP")
             else:
+                # Ensure UHF is open
+                if not app.uhf_mgr.is_open:
+                    log_to_file("UHF not open, opening...")
+                    app.uhf_mgr.open()
+                
                 if app.uhf_mgr.start_inventory():
                     Clock.schedule_interval(self.poll, 0.25)
                     self.btn_scan.text='STOP UHF'
                     self.btn_scan.background_color=(0.9,0.2,0.2,1)
+                    self.lbl_status.text = 'UHF Scanning...'
+                    log_to_file("UHF toggled START OK")
+                else:
+                    self.lbl_status.text = 'UHF Start Failed - Check Log'
+                    log_to_file("UHF start_inventory returned False")
         except Exception as e:
             log_to_file(f"toggle crash {e} {traceback.format_exc()}")
+            try:
+                self.lbl_status.text = f'Error: {e}'[:40]
+            except:
+                pass
+
 
     def poll(self, dt):
         try:
