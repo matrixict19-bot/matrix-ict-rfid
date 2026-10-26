@@ -26,7 +26,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==3.0.0
 
-      - name: Create buildozer.spec - V19 FIX BLANK SCREEN + 5 POINTS - main.py make_safe_card
+      - name: Create buildozer.spec - V21 FILE CHOOSER + 5 POINTS - Import picker
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -37,7 +37,7 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas,json,jar,csv,db
           source.include_patterns = libs/*,reader.jar,03_Libs_UHF_C72/*
           source.exclude_patterns = build,bin,.buildozer,.git,*.log
-          version = 1.0
+          version = 1.1
           requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1,android
           orientation = portrait
           fullscreen = 0
