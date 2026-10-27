@@ -1,11 +1,9 @@
 name: Build MATRIX APK FULL UHF
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python 3.11
@@ -25,8 +23,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==3.0.0
-
-      - name: Create buildozer.spec - V29 V21 BASE + REAL JAR + FLEX PATH + BARCODE FIX - 5 POINTS
+      - name: Create buildozer.spec - V27 CLEAN
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
@@ -35,9 +32,9 @@ jobs:
           package.domain = com.matrixict.rfid
           source.dir = .
           source.include_exts = py,png,jpg,kv,atlas,json,jar,csv,db,so
-          source.include_patterns = libs/*,*.jar,arm64-v8a/*,armeabi-v7a/*,03_Libs_UHF_C72/*,03_Libs_UHF_C72/*/*
+          source.include_patterns = 03_Libs_UHF_C72/*,03_Libs_UHF_C72/*/*
           source.exclude_patterns = build,bin,.buildozer,.git,*.log
-          version = 1.5
+          version = 1.4
           requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1,android
           orientation = portrait
           fullscreen = 0
@@ -46,7 +43,7 @@ jobs:
           android.minapi = 24
           android.ndk = 25b
           android.accept_sdk_license_agreement = True
-          android.add_jars = reader.jar:SDK_Release_v202207131954.jar:SDK-Release-v202207131954.jar:03_Libs_UHF_C72/reader.jar:03_Libs_UHF_C72/SDK_Release_v202207131954.jar
+          android.add_jars = 03_Libs_UHF_C72/reader.jar,03_Libs_UHF_C72/SDK_Release_v202207131954.jar
           android.add_src = 03_Libs_UHF_C72
           p4a.branch = master
           android.logcat_filters = *:S python:D
@@ -55,62 +52,13 @@ jobs:
           log_level = 2
           warn_on_root = 1
           EOF
-          cat buildozer.spec
-          echo "=== Checking JARs ==="
-          ls -lh *.jar 03_Libs_UHF_C72/*.jar 2>/dev/null || true
-          ls -lh arm64-v8a/ armeabi-v7a/ 03_Libs_UHF_C72/arm64-v8a/ 03_Libs_UHF_C72/armeabi-v7a/ 2>/dev/null || true
-          if [ ! -f reader.jar ] && [ -f 03_Libs_UHF_C72/reader.jar ]; then cp 03_Libs_UHF_C72/reader.jar ./reader.jar; fi
-          if [ ! -f SDK_Release_v202207131954.jar ] && [ -f 03_Libs_UHF_C72/SDK_Release_v202207131954.jar ]; then cp 03_Libs_UHF_C72/SDK_Release_v202207131954.jar ./; fi
-          unzip -l reader.jar 2>/dev/null | grep -i RFIDWithUHF | head -5 || echo "No RFID class in reader.jar?"
-
-      - name: Pre-clone p4a
-        run: |
-          rm -rf .buildozer/android/platform/python-for-android
-          rm -rf $HOME/.buildozer/android/platform/android-ndk-*
-          mkdir -p .buildozer/android/platform
-          git clone https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android --branch master --depth 1
-          find .buildozer/android/platform/python-for-android -name "*.py" -type f -exec sed -i 's/pip install -U pip/echo skip pip upgrade/g' {} \; 2>/dev/null || true
-
-      - name: Fix SDK paths
-        run: |
-          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          if [ ! -d "$SDK_DIR" ]; then
-            buildozer android debug --verbose 2>&1 | head -50 || true
-          fi
-          NEW_MGR=$(find $SDK_DIR -name sdkmanager -type f 2>/dev/null | head -1)
-          OLD_MGR=$SDK_DIR/tools/bin/sdkmanager
-          if [ -f "$NEW_MGR" ]; then
-            mkdir -p $(dirname $OLD_MGR)
-            ln -sf $NEW_MGR $OLD_MGR || true
-            chmod +x $NEW_MGR || true
-            yes | $NEW_MGR --sdk_root=$SDK_DIR --licenses || true
-            $NEW_MGR --sdk_root=$SDK_DIR "platform-tools" "build-tools;33.0.2" "build-tools;37.0.0" "platforms;android-33" || true
-          fi
-          mkdir -p $SDK_DIR/licenses
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_DIR/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_DIR/licenses/android-sdk-license
-          echo "24333f8a63b6825ea1c5514fbf989ee4384f793" >> $SDK_DIR/licenses/android-sdk-license
-
+          ls -lh 03_Libs_UHF_C72/
       - name: Build APK
         run: |
-          set -o pipefail
           buildozer android debug --verbose 2>&1 | tee build.log
-          ls -lh bin/
-
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            build.log
-            .buildozer/logs/*
-          if-no-files-found: warn
-
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: matrix-ict-apk-full-uhf
           path: bin/*.apk
-          if-no-files-found: warn
