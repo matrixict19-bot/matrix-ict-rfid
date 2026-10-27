@@ -1,11 +1,8 @@
-
-# MATRIX ICT - V27 - V21 BASE + IMPORT/EXPORT ANYWHERE + UHF PHYSICAL BUTTON FIX - 5 POINTS
+# MATRIX ICT - V28 - V21 BASE + REAL JAR + BARCODE CLOSE FIX - 5 POINTS
 import sqlite3, os, traceback, random, sys
 from datetime import datetime
 
-# Global crash catcher - writes even on Python crash
 def get_app_folder_safe():
-    # V25 - V21 BASE FIX 5 POINTS - private folder only, NO Download to avoid Permission Denied
     try:
         from android.storage import app_storage_path
         p = app_storage_path()
@@ -38,7 +35,6 @@ def handle_exception(exc_type, exc_value, exc_tb):
             f.write("\n")
     except:
         pass
-    # Call original
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 sys.excepthook = handle_exception
@@ -46,9 +42,8 @@ sys.excepthook = handle_exception
 try:
     os.makedirs(APP_FOLDER, exist_ok=True)
     with open(LOG_PATH, 'w', encoding='utf-8') as f:
-        f.write(f"=== V17 Started - Fixed bold TextInput {datetime.now()} ===\n")
+        f.write(f"=== V28 Started REAL JAR {datetime.now()} ===\n")
         f.write(f"Folder: {APP_FOLDER}\n")
-        f.write(f"Files: {os.listdir(APP_FOLDER)[:15]}\n")
 except Exception as e:
     print(f"Log init fail: {e}")
 
@@ -71,7 +66,6 @@ PRIMARY = "#FF8C00"
 SECONDARY = "#2B2E33"
 
 def find_logo():
-    # V25 - V21 BASE - search only private folder and cwd, NO Download
     for d in [APP_FOLDER, os.getcwd()]:
         if not d:
             continue
@@ -90,7 +84,6 @@ def find_logo():
     return None
 
 def make_safe_card():
-    # FIX BLANK SCREEN - was missing in V18, caused NameError in Pydroid3 and APK
     return BoxLayout(orientation='vertical', padding=12, spacing=6, size_hint_y=None)
 
 def init_db(db_path):
@@ -113,7 +106,6 @@ def init_db(db_path):
         return 0
 
 def find_csv():
-    # V25 - 5 POINTS - DO NOT look at Download folder, only private + Download
     for d in [APP_FOLDER, "/storage/emulated/0/Download", "/sdcard/Download", os.getcwd()]:
         if not d:
             continue
@@ -140,7 +132,6 @@ class UHFManager_G2_Real:
         self.sdk_version = "unknown"
         try:
             from jnius import autoclass
-            # V26 - 5 POINTS - Try all possible C72 SDK class names
             possible_classes = [
                 'com.rscja.deviceapi.RFIDWithUHFUART',
                 'com.rscja.deviceapi.RFIDWithUHF',
@@ -153,29 +144,27 @@ class UHFManager_G2_Real:
                     self.client = Clz.getInstance()
                     self.has_g2 = True
                     self.sdk_version = cls_name
-                    log_to_file(f"UHF SDK FOUND: {cls_name}")
+                    log_to_file(f"UHF SDK FOUND: {cls_name} - REAL JAR")
                     break
                 except Exception as e:
                     log_to_file(f"UHF try {cls_name} fail: {e}")
                     continue
-            
             if not self.has_g2:
-                log_to_file("UHF SDK NOT FOUND - will use fake mode")
+                log_to_file("UHF SDK NOT FOUND - will use fake mode - CHECK reader.jar in APK")
         except Exception as e:
             log_to_file(f"UHF init crash: {e} {traceback.format_exc()}")
             self.has_g2 = False
 
-    def open(self): 
-        if not self.has_g2: 
+    def open(self):
+        if not self.has_g2:
             log_to_file("UHF open: no G2 SDK, fake mode")
             return False
-        try: 
-            # V26 - Try init with and without context
+        try:
             try:
                 self.client.init()
                 log_to_file("UHF init() OK")
             except Exception as e1:
-                log_to_file(f"UHF init() fail: {e1}, trying init(context)")
+                log_to_file(f"UHF init() fail: {e1}, trying init(activity)")
                 try:
                     from jnius import autoclass
                     PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -184,46 +173,38 @@ class UHFManager_G2_Real:
                     log_to_file("UHF init(activity) OK")
                 except Exception as e2:
                     log_to_file(f"UHF init(activity) fail: {e2}")
-                    # Still try to continue
-                    pass
-            
-            # Try to set power to max (30 dBm) - C72 specific
             try:
                 self.client.setPower(30)
                 log_to_file("UHF setPower 30 OK")
             except Exception as e:
                 log_to_file(f"UHF setPower fail (normal): {e}")
-            
-            # Try to set frequency to default
             try:
-                # 0 = default region
                 self.client.setFrequencyMode(0)
                 log_to_file("UHF setFrequencyMode OK")
             except Exception as e:
                 log_to_file(f"UHF setFrequency fail (normal): {e}")
-
             self.is_open = True
-            log_to_file("UHF opened SUCCESS")
+            log_to_file("UHF opened SUCCESS REAL")
             return True
         except Exception as e:
             log_to_file(f"UHF open fail: {e} {traceback.format_exc()}")
             return False
 
     def start_inventory(self):
-        if not self.has_g2: 
+        if not self.has_g2:
             log_to_file("UHF start: no G2, fake")
             return False
-        try: 
+        try:
             self.client.startInventoryTag()
             self.is_inventorying=True
-            log_to_file("UHF inventory START OK")
+            log_to_file("UHF inventory START OK REAL")
             return True
-        except Exception as e: 
+        except Exception as e:
             log_to_file(f"UHF start fail: {e} {traceback.format_exc()}")
             return False
 
     def stop_inventory(self):
-        try: 
+        try:
             if self.has_g2 and self.client:
                 self.client.stopInventory()
             self.is_inventorying=False
@@ -235,7 +216,7 @@ class UHFManager_G2_Real:
             return False
 
     def free(self):
-        try: 
+        try:
             if self.is_inventorying and self.has_g2 and self.client:
                 try:
                     self.client.stopInventory()
@@ -257,14 +238,13 @@ class UHFManager_G2_Real:
 
     def read_tags(self):
         tags=[]
-        if not self.has_g2: 
+        if not self.has_g2:
             return tags
         try:
             result = self.client.readTagFromBuffer()
             if result:
                 for tag in result:
                     try:
-                        # Try different methods to get EPC
                         epc = None
                         if hasattr(tag,'getEPC'):
                             epc = tag.getEPC()
@@ -272,66 +252,50 @@ class UHFManager_G2_Real:
                             epc = tag.getEpc()
                         else:
                             epc = str(tag)
-                        
                         if epc:
-                            epc = str(epc).strip().upper()
-                            # Clean EPC - remove spaces
-                            epc = epc.replace(" ", "")
+                            epc = str(epc).strip().upper().replace(" ", "")
                             if epc and len(epc) >= 8:
                                 tags.append(epc)
                     except Exception as te:
                         log_to_file(f"UHF parse tag fail: {te}")
                         pass
                 if tags:
-                    log_to_file(f"UHF read {len(tags)} tags: {tags[:3]}")
+                    log_to_file(f"UHF read {len(tags)} tags REAL: {tags[:3]}")
         except Exception as e:
             log_to_file(f"UHF readTagFromBuffer fail: {e}")
         return tags
-        try:
-            result = self.client.readTagFromBuffer()
-            if result:
-                for tag in result:
-                    try:
-                        epc = tag.getEPC() if hasattr(tag,'getEPC') else str(tag)
-                        epc = str(epc).strip().upper()
-                        if epc: tags.append(epc)
-                    except: pass
-        except: pass
-        return tags
 
-# ===== FIX C72 SWITCH - Barcode <-> UHF =====
 def switch_to_rfid_mode():
-    """يقفل الباركود ويفتح UHF - C72 لا يدعم الاثنين معا"""
     try:
         app = App.get_running_app()
-        log_to_file("Switch -> RFID mode")
-        if hasattr(app, 'barcode_mgr') and app.barcode_mgr.is_open:
+        log_to_file("Switch -> RFID mode V28")
+        if hasattr(app, 'barcode_mgr'):
+            app.barcode_mgr.force_disable()
             app.barcode_mgr.close()
         def do_open(dt):
             try: app.uhf_mgr.open()
             except: pass
-        Clock.schedule_once(do_open, 0.4)
+        Clock.schedule_once(do_open, 0.2)
     except Exception as e:
         log_to_file(f"switch_to_rfid err: {e}")
 
 def switch_to_barcode_mode():
-    """يقفل UHF ويفتح الباركود"""
     try:
         app = App.get_running_app()
-        log_to_file("Switch -> Barcode mode")
+        log_to_file("Switch -> Barcode mode V28")
         if hasattr(app, 'uhf_mgr'):
             if app.uhf_mgr.is_inventorying:
                 app.uhf_mgr.stop_inventory()
             if app.uhf_mgr.is_open:
                 app.uhf_mgr.free()
         def do_open(dt):
-            try: app.barcode_mgr.open()
+            try: 
+                app.barcode_mgr.force_enable()
+                app.barcode_mgr.open()
             except: pass
-        Clock.schedule_once(do_open, 0.4)
+        Clock.schedule_once(do_open, 0.2)
     except Exception as e:
         log_to_file(f"switch_to_barcode err: {e}")
-
-
 
 class BarcodeManager:
     def __init__(self):
@@ -340,6 +304,7 @@ class BarcodeManager:
         self.module_2d = None
         self.has_sdk = False
         self.is_open = False
+        self.disabled = False
         try:
             from jnius import autoclass
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -349,37 +314,58 @@ class BarcodeManager:
             ModuleType = autoclass('com.rscja.deviceapi.BarcodeUtility$ModuleType')
             self.module_2d = ModuleType.BARCODE_2D
             self.has_sdk = True
-            log_to_file("Barcode SDK OK")
+            log_to_file("Barcode SDK OK REAL")
         except Exception as e:
             log_to_file(f"Barcode SDK fail (normal in Pydroid3): {e}")
             self.has_sdk = False
+
     def open(self):
-        if not self.has_sdk: 
+        if self.disabled:
+            log_to_file("Barcode open blocked - disabled for UHF V28")
+            return False
+        if not self.has_sdk:
             self.is_open = True
             return True
-        try: 
+        try:
             self.barcode_util.open(self.activity, self.module_2d)
             self.is_open = True
-            log_to_file("Barcode opened")
+            self.disabled = False
+            log_to_file("Barcode opened V28")
             return True
-        except Exception as e: 
+        except Exception as e:
             log_to_file(f"Barcode open fail: {e}")
             return False
+
     def close(self):
-        if not self.has_sdk: 
+        self.disabled = True
+        if not self.has_sdk:
             self.is_open = False
+            log_to_file("V28 Barcode closed fake disabled")
             return True
-        try: 
-            self.barcode_util.close()
-            self.is_open = False
-            log_to_file("Barcode closed")
-            return True
-        except Exception as e: 
-            log_to_file(f"Barcode close fail: {e}")
-            self.is_open = False
-            return False
+        for i in range(3):
+            try:
+                self.barcode_util.close()
+                log_to_file(f"V28 Barcode close {i+1} OK")
+                break
+            except Exception as e:
+                log_to_file(f"V28 close {i+1} fail: {e}")
+        self.is_open = False
+        log_to_file("V28 Barcode closed FINAL disabled")
+        return True
 
+    def force_disable(self):
+        self.disabled = True
+        self.is_open = False
+        try:
+            if self.has_sdk and self.barcode_util:
+                self.barcode_util.close()
+        except:
+            pass
+        log_to_file("V28 Barcode force_disable")
 
+    def force_enable(self):
+        self.disabled = False
+        log_to_file("V28 Barcode force_enable")
 
 class BarcodeScreen(Screen):
     def __init__(self, **kwargs):
@@ -387,34 +373,45 @@ class BarcodeScreen(Screen):
         self._timer=None
         try:
             self.build_ui()
-            log_to_file("BarcodeScreen V25 built - V21 base + Import/Export anywhere")
+            log_to_file("BarcodeScreen UI built")
         except Exception as e:
             log_to_file(f"BarcodeScreen build FAIL: {e} {traceback.format_exc()}")
 
     def build_ui(self):
         root = BoxLayout(orientation='vertical', padding=0, spacing=0)
+        
+        # HEADER - SAFE LOGO LOAD
         header = BoxLayout(size_hint_y=None, height=70, padding=6, spacing=8)
         logo_path = find_logo()
         if logo_path:
             try:
                 from kivy.uix.image import Image
+                # Safe load with small size
                 img = Image(source=logo_path, size_hint_x=0.65, allow_stretch=True, keep_ratio=True)
                 header.add_widget(img)
-                header.add_widget(Label(text='[b][color=FF8C00]RFID V25[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
-            except:
-                header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V25[/b]', markup=True, font_size=18))
+                header.add_widget(Label(text='[b][color=FF8C00]V28[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
+                log_to_file(f"Logo loaded: {logo_path}")
+            except Exception as e:
+                log_to_file(f"Logo load fail {logo_path}: {e}")
+                header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V17[/b]', markup=True, font_size=18))
         else:
-            header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V25[/b]', markup=True, font_size=18))
+            header.add_widget(Label(text='[b][color=2B2E33]MATRIX[/color][color=FF8C00] ICT[/color] V17[/b]', markup=True, font_size=18))
+        
         root.add_widget(header)
+        
         body = BoxLayout(orientation='vertical', padding=8, spacing=5)
         body.add_widget(Label(text='SCAN BARCODE - Blue Button', size_hint_y=None, height=28, bold=True, color=get_color_from_hex(PRIMARY), font_size=16))
+        
         self.box_bc = TextInput(hint_text='Scan here...', multiline=False, size_hint_y=None, height=75, font_size=28)
         self.box_bc.bind(text=self.on_text_change)
         self.box_bc.bind(on_text_validate=self.do_scan)
         body.add_widget(self.box_bc)
+        
+        # CARD - SAFE, NO CANVAS
         self.card = make_safe_card()
         self.card.size_hint_y = 1
         self.card.height = 300
+        
         self.lbl_lookup = Label(text='Code: -', size_hint_y=None, height=60, color=(0,0,0,1), font_size=32, bold=True, halign='left')
         self.lbl_lookup.bind(size=self.lbl_lookup.setter('text_size'))
         self.lbl_desc = Label(text='Description: -', size_hint_y=None, height=60, color=(0.15,0.15,0.15,1), font_size=22, bold=True, halign='left')
@@ -425,16 +422,21 @@ class BarcodeScreen(Screen):
         self.lbl_sub2.bind(size=self.lbl_sub2.setter('text_size'))
         self.lbl_sub3 = Label(text='Sub3: -', size_hint_y=None, height=40, color=(0.3,0.3,0.3,1), font_size=18, halign='left')
         self.lbl_sub3.bind(size=self.lbl_sub3.setter('text_size'))
+        
         for w in [self.lbl_lookup, self.lbl_desc, self.lbl_sub1, self.lbl_sub2, self.lbl_sub3]:
             self.card.add_widget(w)
+        
         body.add_widget(self.card)
-        self.lbl_status = Label(text='Folder: ' + APP_FOLDER[-30:], size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=10)
+        
+        self.lbl_status = Label(text=f'Folder: {APP_FOLDER[-30:]}', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=10)
         body.add_widget(self.lbl_status)
-        self.lbl_count = Label(text='Ready V25 - V21 base', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=14)
+        self.lbl_count = Label(text='Ready', size_hint_y=None, height=30, color=(0,0.5,0,1), font_size=14)
         body.add_widget(self.lbl_count)
+        
         self.btn_go_rfid = Button(text='Scan item first', size_hint_y=None, height=75, background_color=(0.6,0.6,0.6,1), background_normal='', bold=True, font_size=22, disabled=True)
         self.btn_go_rfid.bind(on_press=self.go_to_rfid)
         body.add_widget(self.btn_go_rfid)
+        
         row = BoxLayout(size_hint_y=None, height=60, spacing=6)
         b1 = Button(text='Import', background_color=(0,0.6,0,1), background_normal='', font_size=16, bold=True)
         b2 = Button(text='Export', background_color=get_color_from_hex(SECONDARY), background_normal='', font_size=16, bold=True)
@@ -446,6 +448,7 @@ class BarcodeScreen(Screen):
         row.add_widget(b2)
         row.add_widget(b3)
         body.add_widget(row)
+        
         root.add_widget(body)
         self.add_widget(root)
 
@@ -453,34 +456,34 @@ class BarcodeScreen(Screen):
         try:
             app = App.get_running_app()
             app.current_screen_name = 'barcode'
-            # V27 - 5 POINTS - Immediately close UHF and open Barcode - no delay for C72 switch
             try:
+                app.barcode_mgr.force_enable()
                 if app.uhf_mgr.is_inventorying:
                     app.uhf_mgr.stop_inventory()
                 if app.uhf_mgr.is_open:
                     app.uhf_mgr.free()
-                log_to_file("V27 Barcode enter: UHF closed")
+                log_to_file("V28 Barcode enter: UHF closed, Barcode enabled")
             except Exception as e:
-                log_to_file(f"V27 Barcode enter UHF close fail: {e}")
-            
+                log_to_file(f"V28 Barcode enter UHF close fail: {e}")
             def _setup(dt):
                 try:
                     app.uhf_mgr.free()
+                    app.barcode_mgr.force_enable()
                     app.barcode_mgr.open()
-                    log_to_file("V27 BarcodeScreen on_enter OK - Barcode opened")
+                    log_to_file("V28 BarcodeScreen on_enter OK - Barcode opened")
                 except Exception as e:
-                    log_to_file(f"V27 on_enter fail: {e}")
-            # Open immediately + delayed backup
+                    log_to_file(f"V28 on_enter fail: {e}")
             try:
+                app.barcode_mgr.force_enable()
                 app.barcode_mgr.open()
             except:
                 pass
-            Clock.schedule_once(_setup, 0.3)
-            Clock.schedule_once(lambda dt: setattr(self.box_bc, 'focus', True), 0.5)
-            self.lbl_count.text=f'Items: {app.db_count} | V27'
+            Clock.schedule_once(_setup, 0.2)
+            Clock.schedule_once(lambda dt: setattr(self.box_bc, 'focus', True), 0.4)
+            self.lbl_count.text=f'Items: {app.db_count} | V28 REAL JAR'
             self.update_btn()
         except Exception as e:
-            log_to_file(f"V27 on_enter crash: {e} {traceback.format_exc()}")
+            log_to_file(f"V28 on_enter crash: {e} {traceback.format_exc()}")
         except Exception as e:
             log_to_file(f"on_enter crash: {e} {traceback.format_exc()}")
 
@@ -529,10 +532,12 @@ class BarcodeScreen(Screen):
                 inst.text=''
                 self.lbl_count.text=f'Found: {row[1]}'
                 self.lbl_count.color=(0,0.6,0,1)
+                log_to_file(f"Found {row[1]}")
                 self.update_btn()
             else:
                 self.lbl_count.text=f'Not found: {code}'
                 self.lbl_count.color=(1,0,0,1)
+                log_to_file(f"Not found {code}")
                 inst.text=''
         except Exception as e:
             self.lbl_count.text=f'Error: {e}'
@@ -558,216 +563,46 @@ class BarcodeScreen(Screen):
             if not app.curr_id: return
             app.barcode_mgr.close()
             self.box_bc.focus=False
+            log_to_file(f"Go RFID {app.curr_code}")
             self.manager.transition=SlideTransition(direction='left')
             self.manager.current='rfid'
         except Exception as e:
             log_to_file(f"go_to_rfid crash: {e} {traceback.format_exc()}")
 
     def import_csv(self, inst):
-        # V25 - V21 BASE - 5 POINTS - Import from anywhere
-        self.open_csv_chooser_anywhere()
-
-    def request_all_files_permission(self):
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            activity = PythonActivity.mActivity
-            Intent = autoclass('android.content.Intent')
-            Settings = autoclass('android.provider.Settings')
-            Uri = autoclass('android.net.Uri')
-            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            uri = Uri.parse("package:" + activity.getPackageName())
-            intent.setData(uri)
-            activity.startActivity(intent)
-            self.lbl_count.text = 'Grant All files access'
-            return True
-        except Exception as e:
-            log_to_file(f"request permission fail: {e}")
-            return False
-
-    def open_csv_chooser_anywhere(self):
-        # V25 - Import: Choose CSV from ANYWHERE - V21 base stable
-        try:
-            start_path = "/storage/emulated/0"
-            try:
-                if not os.path.exists(start_path):
-                    start_path = "/storage/emulated/0/Download"
-            except:
-                start_path = APP_FOLDER
-            if not os.path.exists(start_path):
-                start_path = APP_FOLDER
-            box = BoxLayout(orientation='vertical', spacing=5, padding=5)
-            chooser = FileChooserListView(path=start_path, filters=['*.csv', '*.CSV'], size_hint_y=0.85)
-            box.add_widget(chooser)
-            path_label = Label(text='Current: ' + start_path, size_hint_y=None, height=30, font_size=11)
-            def update_path_label(instance, value):
-                path_label.text = 'Current: ' + value
-            chooser.bind(path=update_path_label)
-            box.add_widget(path_label)
-            btn_row = BoxLayout(size_hint_y=None, height=60, spacing=8, padding=5)
-            btn_cancel = Button(text='Cancel', background_color=(0.6,0.6,0.6,1), background_normal='', font_size=16)
-            btn_perm = Button(text='Grant Access', background_color=(0.2,0.6,1,1), background_normal='', font_size=11)
-            btn_select = Button(text='Select CSV', background_color=get_color_from_hex(PRIMARY), background_normal='', bold=True, font_size=16)
-            btn_row.add_widget(btn_cancel)
-            btn_row.add_widget(btn_perm)
-            btn_row.add_widget(btn_select)
-            box.add_widget(btn_row)
-            popup = Popup(title='Import: Choose CSV from ANYWHERE', content=box, size_hint=(0.95, 0.92), auto_dismiss=False)
-            def do_cancel(instance):
-                popup.dismiss()
-            def do_perm(instance):
-                self.request_all_files_permission()
-                popup.dismiss()
-            def do_select(instance):
-                try:
-                    if chooser.selection:
-                        selected = chooser.selection[0]
-                        popup.dismiss()
-                        self.do_import_file_anywhere(selected)
-                    else:
-                        self.lbl_count.text = 'Select a file first'
-                except Exception as e:
-                    log_to_file(f"Select error: {e}")
-                    popup.dismiss()
-            btn_cancel.bind(on_press=do_cancel)
-            btn_perm.bind(on_press=do_perm)
-            btn_select.bind(on_press=do_select)
-            chooser.bind(on_submit=lambda instance, selection, touch: do_select(None) if selection else None)
-            popup.open()
-        except Exception as e:
-            log_to_file(f"Chooser import crash: {e} {traceback.format_exc()}")
-            self.lbl_count.text = 'Chooser error'
-
-    def do_import_file_anywhere(self, csv_path):
-        # V25 - 5 POINTS isolated, no side effects
         app = App.get_running_app()
-        log_to_file(f"Importing anywhere: {csv_path}")
+        csv_path = find_csv()
+        log_to_file(f"Import {csv_path}")
         if not csv_path:
-            self.lbl_count.text = 'No file selected'
+            self.lbl_count.text=f'No CSV'
             return
         try:
-            exists = os.path.exists(csv_path)
-        except PermissionError:
-            self.lbl_count.text = 'Permission denied'
-            self.open_csv_chooser_anywhere()
-            return
-        except Exception:
-            self.lbl_count.text = 'File error'
-            return
-        if not exists:
-            self.lbl_count.text = 'File not found'
-            return
-        try:
-            import shutil
-            private_copy = os.path.join(APP_FOLDER, "Matrix_Items_imported.csv")
-            csv_path_to_read = csv_path
-            try:
-                shutil.copy2(csv_path, private_copy)
-                csv_path_to_read = private_copy
-            except:
-                csv_path_to_read = csv_path
             conn=sqlite3.connect(app.DB)
             c=conn.cursor()
             bc=0
-            with open(csv_path_to_read,'r',encoding='utf-8',errors='ignore') as f:
+            with open(csv_path,'r',encoding='utf-8',errors='ignore') as f:
                 import csv
                 reader=csv.DictReader(f)
                 for row in reader:
-                    bcode=row.get('barcode') or row.get('Barcode') or row.get('BARCODE') or ''
+                    bcode=row.get('barcode') or row.get('Barcode') or ''
                     bcode=str(bcode).strip()
-                    if not bcode:
-                        for k in row.keys():
-                            if 'barcode' in k.lower() or 'barcod' in k.lower():
-                                bcode = str(row[k]).strip()
-                                break
                     if not bcode: continue
-                    try:
-                        raw_id = row.get('ItemID') or row.get('ItemId') or row.get('ID') or 0
-                        item_id=int(float(str(raw_id).strip() or 0))
-                        if item_id == 0:
-                            continue
+                    try: item_id=int(row['ItemID'] or row['ItemId'])
                     except: continue
-                    try:
-                        c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode','') or '',row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
-                        c.execute('INSERT OR IGNORE INTO Barcod VALUES (NULL,?,?)',(item_id,bcode))
-                        bc+=1
-                    except:
-                        continue
+                    c.execute('INSERT OR IGNORE INTO Items VALUES (?,?,?,?,?,?)',(item_id,row.get('ItemLookupCode',''),row.get('Description',''),row.get('Subdescription1',''),row.get('Subdescription2',''),row.get('Subdescription3','')))
+                    c.execute('INSERT OR IGNORE INTO Barcod VALUES (NULL,?,?)',(item_id,bcode))
+                    bc+=1
             conn.commit()
             c.execute('SELECT count(*) FROM Items')
             app.db_count=c.fetchone()[0]
             conn.close()
             self.lbl_count.text=f'Imported {bc} | Total {app.db_count}'
-            self.lbl_status.text='File: ' + os.path.basename(csv_path)
-        except PermissionError:
-            self.lbl_count.text = 'Permission denied'
-            self.open_csv_chooser_anywhere()
+            log_to_file(f"Imported {bc}")
         except Exception as e:
-            self.lbl_count.text='Err ' + str(e)[:30]
+            self.lbl_count.text=f'Err {e}'
             log_to_file(f"Import crash: {e} {traceback.format_exc()}")
 
     def export_txt(self, inst):
-        # V25 - Export: Choose save location anywhere
-        self.open_export_chooser_anywhere()
-
-    def open_export_chooser_anywhere(self):
-        # V25 - Export chooser - V21 base + anywhere
-        try:
-            start_path = "/storage/emulated/0/Download"
-            try:
-                if not os.path.exists(start_path):
-                    start_path = "/storage/emulated/0"
-            except:
-                start_path = APP_FOLDER
-            if not os.path.exists(start_path):
-                start_path = APP_FOLDER
-            box = BoxLayout(orientation='vertical', spacing=5, padding=5)
-            chooser = FileChooserListView(path=start_path, size_hint_y=0.80)
-            chooser.filters = []
-            box.add_widget(chooser)
-            path_label = Label(text='Save to: ' + start_path, size_hint_y=None, height=30, font_size=11)
-            def update_path_label(instance, value):
-                path_label.text = 'Save to: ' + value
-            chooser.bind(path=update_path_label)
-            box.add_widget(path_label)
-            info = Label(text='Select FOLDER then Save', size_hint_y=None, height=25, font_size=10, color=(0,0.6,0,1))
-            box.add_widget(info)
-            btn_row = BoxLayout(size_hint_y=None, height=60, spacing=8, padding=5)
-            btn_cancel = Button(text='Cancel', background_color=(0.6,0.6,0.6,1), background_normal='', font_size=16)
-            btn_perm = Button(text='Grant Access', background_color=(0.2,0.6,1,1), background_normal='', font_size=11)
-            btn_save = Button(text='Save Here', background_color=get_color_from_hex(PRIMARY), background_normal='', bold=True, font_size=16)
-            btn_row.add_widget(btn_cancel)
-            btn_row.add_widget(btn_perm)
-            btn_row.add_widget(btn_save)
-            box.add_widget(btn_row)
-            popup = Popup(title='Export: Choose Folder to Save', content=box, size_hint=(0.95, 0.92), auto_dismiss=False)
-            def do_cancel(instance):
-                popup.dismiss()
-            def do_perm(instance):
-                self.request_all_files_permission()
-                popup.dismiss()
-            def do_save(instance):
-                try:
-                    save_dir = chooser.path
-                    if chooser.selection and os.path.isdir(chooser.selection[0]):
-                        save_dir = chooser.selection[0]
-                    elif chooser.selection and os.path.isfile(chooser.selection[0]):
-                        save_dir = os.path.dirname(chooser.selection[0])
-                    popup.dismiss()
-                    self.do_export_anywhere(save_dir)
-                except Exception as e:
-                    log_to_file(f"Export chooser error: {e}")
-                    popup.dismiss()
-            btn_cancel.bind(on_press=do_cancel)
-            btn_perm.bind(on_press=do_perm)
-            btn_save.bind(on_press=do_save)
-            popup.open()
-        except Exception as e:
-            log_to_file(f"Export chooser crash: {e} {traceback.format_exc()}")
-            self.lbl_count.text = 'Export chooser error'
-
-    def do_export_anywhere(self, save_dir):
-        # V25 - 5 POINTS isolated
         try:
             app = App.get_running_app()
             conn=sqlite3.connect(app.DB)
@@ -776,40 +611,16 @@ class BarcodeScreen(Screen):
             rows=c.fetchall()
             conn.close()
             if not rows:
-                self.lbl_count.text='No RFID to export'
+                self.lbl_count.text='No RFID'
                 return
-            try:
-                if not os.path.exists(save_dir):
-                    save_dir = APP_FOLDER
-            except:
-                save_dir = APP_FOLDER
-            fn="RFID_Export_" + datetime.now().strftime('%Y%m%d_%H%M%S') + ".txt"
-            path=os.path.join(save_dir, fn)
-            try:
-                with open(path,'w',encoding='utf-8') as f:
-                    f.write("Itemcode | Description | RFID" + chr(10))
-                    for r in rows:
-                        f.write(f"{r[0]} | {r[1]} | {r[2]}" + chr(10))
-                self.lbl_count.text=f'Exported {len(rows)}'
-                self.lbl_status.text='Saved: ' + path[-40:]
-            except PermissionError:
-                fallback_path=os.path.join(APP_FOLDER, fn)
-                with open(fallback_path,'w',encoding='utf-8') as f:
-                    f.write("Itemcode | Description | RFID" + chr(10))
-                    for r in rows:
-                        f.write(f"{r[0]} | {r[1]} | {r[2]}" + chr(10))
-                self.lbl_count.text=f'Exported {len(rows)} to private'
-                self.lbl_status.text='Permission denied, saved privately'
-                try:
-                    import shutil
-                    dl_path=os.path.join("/storage/emulated/0/Download", fn)
-                    shutil.copy2(fallback_path, dl_path)
-                    self.lbl_status.text='Saved to Download: ' + fn
-                except:
-                    pass
+            fn=f"RFID_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            path=os.path.join(APP_FOLDER, fn)
+            with open(path,'w',encoding='utf-8') as f:
+                f.write("Itemcode | Description | RFID\n")
+                for r in rows: f.write(f"{r[0]} | {r[1]} | {r[2]}\n")
+            self.lbl_count.text=f'Exported {len(rows)}'
         except Exception as e:
-            self.lbl_count.text='Export Err ' + str(e)[:20]
-            log_to_file(f"Export crash: {e} {traceback.format_exc()}")
+            log_to_file(f"Export crash: {e}")
 
     def show_log(self, inst):
         try:
@@ -818,7 +629,6 @@ class BarcodeScreen(Screen):
                     content = f.read()[-300:]
                 self.lbl_status.text = content[-60:]
         except: pass
-
 
 class RFIDScreen(Screen):
     def __init__(self, **kwargs):
@@ -839,9 +649,9 @@ class RFIDScreen(Screen):
                 header.add_widget(Image(source=logo_path, size_hint_x=0.65, allow_stretch=True, keep_ratio=True))
                 header.add_widget(Label(text='[b][color=FF8C00]V16[/color][/b]', markup=True, font_size=14, size_hint_x=0.35))
             except:
-                header.add_widget(Label(text='[b]MATRIX ICT RFID V26[/b]', markup=True, font_size=16))
+                header.add_widget(Label(text='[b]MATRIX ICT V28[/b]', markup=True, font_size=16))
         else:
-            header.add_widget(Label(text='[b]MATRIX ICT RFID V26[/b]', markup=True, font_size=16))
+            header.add_widget(Label(text='[b]MATRIX ICT V28[/b]', markup=True, font_size=16))
         root.add_widget(header)
         body=BoxLayout(orientation='vertical',padding=8,spacing=5)
         self.lbl_item=Label(text='Item: -', size_hint_y=None,height=60,bold=True,color=get_color_from_hex(PRIMARY), font_size=28)
@@ -887,34 +697,37 @@ class RFIDScreen(Screen):
             self.lbl_desc.text=f'{app.curr_desc}'
             self.seen_set = set([t.upper().strip() for t in app.rfid_list])
             self.refresh()
-            log_to_file(f"V27 RFID enter {app.curr_code} - CLOSING Barcode, OPENING UHF")
-            
-            # V27 - IMMEDIATELY close Barcode - C72 cannot have both
+            log_to_file(f"V28 RFID enter {app.curr_code} - FORCE CLOSE Barcode REAL")
             try:
+                app.barcode_mgr.force_disable()
                 app.barcode_mgr.close()
-                log_to_file("V27 RFID enter: Barcode closed immediately")
+                app.barcode_mgr.force_disable()
+                log_to_file("V28 RFID enter: Barcode force_disable x2 REAL")
             except Exception as e:
-                log_to_file(f"V27 RFID enter Barcode close fail: {e}")
-            
+                log_to_file(f"V28 RFID enter Barcode fail: {e}")
+            try:
+                app.root.get_screen('barcode').box_bc.focus = False
+            except:
+                pass
             def _open(dt):
                 try:
+                    app.barcode_mgr.force_disable()
                     app.barcode_mgr.close()
-                    if app.uhf_mgr.has_g2: 
+                    if app.uhf_mgr.has_g2:
                         app.uhf_mgr.open()
-                        log_to_file("V27 RFID _open: UHF opened")
+                        log_to_file("V28 RFID _open: UHF opened REAL, Barcode closed")
                     else:
-                        log_to_file(f"V27 RFID _open: No UHF SDK {app.uhf_mgr.sdk_version}")
+                        log_to_file(f"V28 RFID _open: No UHF SDK {app.uhf_mgr.sdk_version} - CHECK reader.jar!")
                 except Exception as e:
-                    log_to_file(f"V27 RFID _open err {e}")
-            # Immediate + delayed
+                    log_to_file(f"V28 RFID _open err {e}")
             try:
+                app.barcode_mgr.force_disable()
                 if app.uhf_mgr.has_g2:
                     app.uhf_mgr.open()
             except:
                 pass
-            Clock.schedule_once(_open, 0.2)
-        except Exception as e:
-            log_to_file(f"V27 RFID on_enter crash: {e} {traceback.format_exc()}")
+            Clock.schedule_once(_open, 0.1)
+            Clock.schedule_once(_open, 0.5)
         except Exception as e:
             log_to_file(f"RFID on_enter crash: {e} {traceback.format_exc()}")
 
@@ -990,47 +803,36 @@ class RFIDScreen(Screen):
     def toggle_scan(self, inst):
         try:
             app=App.get_running_app()
-            # V26 - Show UHF SDK status
             if not app.uhf_mgr.has_g2:
-                log_to_file(f"UHF has_g2=False, SDK={app.uhf_mgr.sdk_version} - FAKE mode")
-                self.lbl_status.text = f"No UHF SDK ({app.uhf_mgr.sdk_version}) - Fake mode"
+                log_to_file(f"V28 UHF has_g2=False, SDK={app.uhf_mgr.sdk_version} - FAKE mode REAL JAR MISSING")
+                self.lbl_status.text = f"No UHF SDK ({app.uhf_mgr.sdk_version}) - Fake"
                 fake = f"E28011{random.randint(0,999):03d}{datetime.now().strftime('%H%M%S')}{random.randint(10,99)}"
                 if self.add_tag_unique(fake):
                     self.refresh()
-                    self.counter.text=f'Count: {len(app.rfid_list)} (Fake - No SDK)'
+                    self.counter.text=f'Count: {len(app.rfid_list)} (Fake - No SDK REAL JAR MISSING)'
                 return
-            
-            log_to_file(f"UHF toggle: has_g2=True, is_open={app.uhf_mgr.is_open}, is_inventorying={app.uhf_mgr.is_inventorying}")
-            
+            log_to_file(f"V28 UHF toggle: has_g2=True {app.uhf_mgr.sdk_version} is_open={app.uhf_mgr.is_open}")
             if app.uhf_mgr.is_inventorying:
                 app.uhf_mgr.stop_inventory()
                 Clock.unschedule(self.poll)
                 self.btn_scan.text='START UHF (Blue)'
                 self.btn_scan.background_color=(0.15,0.5,0.9,1)
-                self.lbl_status.text = 'UHF Stopped'
-                log_to_file("UHF toggled STOP")
+                self.lbl_status.text = 'UHF Stopped REAL'
+                log_to_file("V28 UHF STOP")
             else:
-                # Ensure UHF is open
                 if not app.uhf_mgr.is_open:
-                    log_to_file("UHF not open, opening...")
                     app.uhf_mgr.open()
-                
                 if app.uhf_mgr.start_inventory():
                     Clock.schedule_interval(self.poll, 0.25)
                     self.btn_scan.text='STOP UHF'
                     self.btn_scan.background_color=(0.9,0.2,0.2,1)
-                    self.lbl_status.text = 'UHF Scanning...'
-                    log_to_file("UHF toggled START OK")
+                    self.lbl_status.text = 'UHF Scanning REAL...'
+                    log_to_file("V28 UHF START OK REAL")
                 else:
-                    self.lbl_status.text = 'UHF Start Failed - Check Log'
-                    log_to_file("UHF start_inventory returned False")
+                    self.lbl_status.text = 'UHF Start Failed'
+                    log_to_file("V28 UHF start failed")
         except Exception as e:
-            log_to_file(f"toggle crash {e} {traceback.format_exc()}")
-            try:
-                self.lbl_status.text = f'Error: {e}'[:40]
-            except:
-                pass
-
+            log_to_file(f"V28 toggle crash {e} {traceback.format_exc()}")
 
     def poll(self, dt):
         try:
@@ -1102,60 +904,46 @@ class RFIDLinkApp(App):
 
     def on_hardware_key(self, window, key, scancode, codepoint, modifier):
         try:
-            log_to_file(f"V27 KEY {key} scancode={scancode} screen={self.current_screen_name}")
-            # V27 - C72 keys: 120-122 F1-F3, 131-137 scan keys, 264-266, 293-296, 1001-1004 custom
-            # Blue button is usually 131 or 134 or 120
-            SCAN_KEYS = [120,121,122,131,132,133,134,135,136,137,264,265,266,293,294,295,296,1001,1002,1003,1004,66,79,85, 103, 108,  134]
-            
+            log_to_file(f"V28 KEY {key} sc={scancode} screen={self.current_screen_name}")
             if self.current_screen_name == 'rfid':
-                # V27 - In RFID screen, PHYSICAL BUTTON MUST trigger UHF, NOT Barcode
-                # Close Barcode immediately to prevent it from triggering
                 try:
+                    self.barcode_mgr.force_disable()
                     self.barcode_mgr.close()
                 except:
                     pass
-                
-                # Trigger UHF for ANY scan key OR any key in range (to catch all C72 buttons)
-                # V27 fix: if in RFID screen, treat ALL scan-related keys as UHF trigger
-                if key in SCAN_KEYS or (100 <= key <= 160) or (290 <= key <= 310) or key in [134, 135, 131, 132, 120]:
-                    try: 
-                        self.root.get_screen('rfid').toggle_scan(None)
-                        log_to_file(f"V27 RFID physical button {key} -> toggle_scan UHF")
-                    except Exception as e:
-                        log_to_file(f"V27 RFID toggle fail {e}")
-                    return True  # Consume key - prevent Barcode from triggering
-                # Even if key not in list, if we're in RFID screen and it's a hardware key, consume it
-                # This prevents Barcode from activating in RFID screen
-                if scancode in [0, 1] or codepoint == '' or key > 0:
-                    # Likely a hardware scan button not in our list - still treat as UHF trigger
-                    # But only if it's a common scan trigger (not back/home)
-                    if key not in [4, 3, 82]:  # 4=back, 3=home, 82=menu
-                        try:
-                            self.root.get_screen('rfid').toggle_scan(None)
-                            log_to_file(f"V27 RFID unknown hardware key {key} -> UHF (prevent Barcode)")
-                        except:
-                            pass
-                        return True
-            
-            # In Barcode screen, let Barcode SDK handle it - don't consume
-            # But ensure Barcode is open and UHF closed
-            if self.current_screen_name == 'barcode':
-                if key in SCAN_KEYS:
-                    log_to_file(f"V27 Barcode physical button {key} -> Barcode")
+                try:
+                    if self.barcode_mgr.is_open:
+                        log_to_file("V28 WARNING Barcode still open in RFID! Closing")
+                        self.barcode_mgr.force_disable()
+                except:
+                    pass
+                if key not in [4, 3]:
                     try:
-                        if not self.barcode_mgr.is_open:
-                            self.barcode_mgr.open()
-                    except:
-                        pass
-                    # Return False to let system/Barcode SDK handle it (focus TextInput)
-                    return False
-            
+                        self.root.get_screen('rfid').toggle_scan(None)
+                        log_to_file(f"V28 RFID key {key} -> UHF (Barcode blocked REAL)")
+                    except Exception as e:
+                        log_to_file(f"V28 toggle fail {e}")
+                    return True
+            if self.current_screen_name == 'barcode':
+                try:
+                    if self.barcode_mgr.disabled:
+                        self.barcode_mgr.force_enable()
+                    if not self.barcode_mgr.is_open:
+                        self.barcode_mgr.open()
+                    if self.uhf_mgr.is_inventorying:
+                        self.uhf_mgr.stop_inventory()
+                    if self.uhf_mgr.is_open:
+                        self.uhf_mgr.free()
+                except:
+                    pass
+                return False
             return False
         except Exception as e:
-            log_to_file(f"V27 key crash {e} {traceback.format_exc()}")
+            log_to_file(f"V28 key crash {e} {traceback.format_exc()}")
             return False
         except Exception as e:
             log_to_file(f"key crash {e}")
+            return False
             return False
 
 if __name__=='__main__':
