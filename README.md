@@ -1,1 +1,0 @@
-# Matrix ICT RFID - C72 UHF\n\nClean build - FINAL UHF WORKING\n\n## Files\n- main.py = FINAL with Barcode<->UHF switch fix\n- buildozer.spec = api 33, ndk 28c, arch arm64-v8a only\n- reader.jar = UHF SDK\n- .github/workflows/build.yml = fixed build\n
