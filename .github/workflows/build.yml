@@ -1,64 +1,53 @@
-name: Build MATRIX APK FULL UHF
+name: Build Matrix-ICT APK
+ 
 on:
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
+ 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+ 
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Set up Java 17
-        uses: actions/setup-java@v5
+          python-version: '3.10'
+ 
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-      - name: Install dependencies
+ 
+      - name: Install system packages
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y python3-pip zip unzip openjdk-17-jdk libffi-dev libssl-dev libltdl-dev autoconf automake libtool pkg-config zlib1g-dev
-      - name: Install Buildozer
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake \
+            libffi-dev libssl-dev build-essential ccache
+ 
+      - name: Install buildozer
         run: |
-          pip install --upgrade pip
-          pip install buildozer==1.5.0 cython==3.0.0
-      - name: Create buildozer.spec - V27 CLEAN
-        run: |
-          cat > buildozer.spec << 'EOF'
-          [app]
-          title = MATRIX ICT RFID
-          package.name = matrixictrfid
-          package.domain = com.matrixict.rfid
-          source.dir = .
-          source.include_exts = py,png,jpg,kv,atlas,json,jar,csv,db,so
-          source.include_patterns = 03_Libs_UHF_C72/*,03_Libs_UHF_C72/*/*
-          source.exclude_patterns = build,bin,.buildozer,.git,*.log
-          version = 1.4
-          requirements = python3,kivy==2.3.1,pyjnius,charset_normalizer==2.1.1,urllib3==1.26.15,idna==3.4,certifi==2022.12.7,chardet==4.0.0,requests==2.27.1,android
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,VIBRATE
-          android.api = 33
-          android.minapi = 24
-          android.ndk = 25b
-          android.accept_sdk_license_agreement = True
-          android.add_jars = 03_Libs_UHF_C72/reader.jar,03_Libs_UHF_C72/SDK_Release_v202207131954.jar
-          android.add_src = 03_Libs_UHF_C72
-          p4a.branch = master
-          android.logcat_filters = *:S python:D
-          android.logcat_pid_only = False
-          [buildozer]
-          log_level = 2
-          warn_on_root = 1
-          EOF
-          ls -lh 03_Libs_UHF_C72/
-      - name: Build APK
-        run: |
-          buildozer android debug --verbose 2>&1 | tee build.log
+          python -m pip install --upgrade pip
+          pip install buildozer cython virtualenv setuptools
+ 
+      - name: Cache buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-
+ 
+      - name: Build debug APK
+        run: buildozer -v android debug
+ 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: matrix-ict-apk-full-uhf
+          name: matrix-rfid-apk
           path: bin/*.apk
+ 
