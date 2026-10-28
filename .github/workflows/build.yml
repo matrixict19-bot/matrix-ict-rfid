@@ -1,4 +1,4 @@
-name: Build  Matrix APK
+name: Build APK
 
 on:
   workflow_dispatch:
@@ -39,6 +39,16 @@ jobs:
             .buildozer
           key: buildozer-${{ hashFiles('buildozer.spec') }}
           restore-keys: buildozer-
+
+      - name: Download SDK (first pass, may fail on licenses)
+        run: buildozer -v android debug || true
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          SDKM=$(find "$SDK" -name sdkmanager -type f | head -1)
+          echo "sdkmanager: $SDKM"
+          yes | "$SDKM" --sdk_root="$SDK" --licenses || true
 
       - name: Build debug APK
         run: buildozer -v android debug
