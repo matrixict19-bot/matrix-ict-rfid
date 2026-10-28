@@ -23,14 +23,28 @@ APP_FOLDER = get_app_folder_safe()
 DB_PATH = os.path.join(APP_FOLDER, "rfid.db")
 LOG_PATH = os.path.join(APP_FOLDER, "rfid_crash_log.txt")
 
-def log_to_file(msg):
+EXT_LOG_DIR = "/storage/emulated/0/Android/data/com.matrixict.rfid.matrixictrfid/files"
+EXT_LOG_PATH = os.path.join(EXT_LOG_DIR, "rfid_crash_log.txt")
+
+def _ext_log(text):
     try:
-        with open(LOG_PATH, 'a', encoding='utf-8') as f:
-            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}\n")
+        os.makedirs(EXT_LOG_DIR, exist_ok=True)
+        with open(EXT_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(text)
     except:
         pass
 
+def log_to_file(msg):
+    line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}\n"
+    try:
+        with open(LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(line)
+    except:
+        pass
+    _ext_log(line)
+
 def handle_exception(exc_type, exc_value, exc_tb):
+    _ext_log(f"\n=== CRASH {datetime.now()} ===\n" + ''.join(traceback.format_exception(exc_type, exc_value, exc_tb)) + "\n")
     try:
         with open(LOG_PATH, 'a', encoding='utf-8') as f:
             f.write(f"\n=== CRASH {datetime.now()} ===\n")
@@ -42,6 +56,15 @@ def handle_exception(exc_type, exc_value, exc_tb):
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 sys.excepthook = handle_exception
+
+try:
+    import faulthandler
+    os.makedirs(EXT_LOG_DIR, exist_ok=True)
+    _fh = open(os.path.join(EXT_LOG_DIR, "rfid_native_crash.txt"), 'a')
+    faulthandler.enable(file=_fh, all_threads=True)
+except Exception:
+    pass
+_ext_log(f"=== process start {datetime.now()} ===\n")
 
 try:
     os.makedirs(APP_FOLDER, exist_ok=True)
@@ -166,16 +189,24 @@ class UHFManager_G2_Real:
         self._tags = collections.deque(maxlen=5000)
         self._handler = None
         self._open_lock = threading.Lock()
+        # Lazy: the Java GClient is only created in open() so a problem there can never stop the app from starting
+        self.has_g2 = True
+        self.sdk_version = "GClient (GXWL, lazy)"
+
+    def _ensure_client(self):
+        if self.client is not None:
+            return True
         try:
             from jnius import autoclass
             GClient = autoclass('com.gg.reader.api.dal.GClient')
             self.client = GClient()
-            self.has_g2 = True
-            self.sdk_version = "GClient (GXWL)"
             log_to_file("UHF SDK FOUND: com.gg.reader.api.dal.GClient")
+            return True
         except Exception as e:
-            log_to_file(f"UHF SDK NOT FOUND (GClient): {e} - fake mode")
+            log_to_file(f"UHF SDK NOT FOUND (GClient): {e} {traceback.format_exc()}")
             self.has_g2 = False
+            self.sdk_version = "GClient missing"
+            return False
 
     def _write_power(self, value):
         try:
@@ -241,6 +272,8 @@ class UHFManager_G2_Real:
             if self.is_open:
                 return True
             try:
+                if not self._ensure_client():
+                    return False
                 self._write_power("1")
                 time.sleep(1.5)
                 if self._handler is None:
