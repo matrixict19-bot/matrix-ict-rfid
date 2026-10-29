@@ -69,6 +69,8 @@ public class UhfBridge implements HandlerTagEpcLog {
     public String startInventory() {
         try {
             queue.clear();
+            // same as the G2 demo: quick Stop first, in case a previous read is still running
+            try { client.sendUnsynMsg(new MsgBaseStop()); } catch (Throwable ignored) { }
             MsgBaseInventoryEpc msg = new MsgBaseInventoryEpc();
             msg.setAntennaEnable(Long.valueOf(EnumG.AntennaNo_1));
             msg.setInventoryMode(EnumG.InventoryMode_Inventory);
