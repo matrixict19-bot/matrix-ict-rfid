@@ -6,7 +6,15 @@ import com.gg.reader.api.protocol.gx.EnumG;
 import com.gg.reader.api.protocol.gx.LogBaseEpcInfo;
 import com.gg.reader.api.protocol.gx.MsgBaseInventoryEpc;
 import com.gg.reader.api.protocol.gx.MsgBaseStop;
+import android.app.Activity;
+import android.content.Context;
+import android.view.KeyEvent;
+import android.view.Window;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * All reader SDK calls live here in Java. Python only calls these simple methods
@@ -89,4 +97,79 @@ public class UhfBridge implements HandlerTagEpcLog {
     public String poll() { return queue.poll(); }
 
     public void clear() { queue.clear(); }
+
+    // ---------------- physical trigger key (keycode 619 on this PDA) ----------------
+    // SDL/Kivy drops key codes it does not know (619), so we catch it here in Java.
+    private static final AtomicInteger keyPresses = new AtomicInteger(0);
+    private static volatile int lastKeyCode = 0;
+    private static Window.Callback originalCallback = null;
+
+    public static void installKeyHook(final Activity activity) {
+        activity.runOnUiThread(new Runnable() {
+            public void run() {
+                try {
+                    final Window window = activity.getWindow();
+                    if (originalCallback != null) return; // already installed
+                    final Window.Callback orig = window.getCallback();
+                    originalCallback = orig;
+                    Window.Callback hook = (Window.Callback) Proxy.newProxyInstance(
+                        Window.Callback.class.getClassLoader(),
+                        new Class[]{Window.Callback.class},
+                        new InvocationHandler() {
+                            public Object invoke(Object proxy, Method m, Object[] args) throws Throwable {
+                                if ("dispatchKeyEvent".equals(m.getName()) && args != null && args.length == 1
+                                        && args[0] instanceof KeyEvent) {
+                                    KeyEvent ev = (KeyEvent) args[0];
+                                    int code = ev.getKeyCode();
+                                    if (code >= 600) {
+                                        lastKeyCode = code;
+                                        if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) {
+                                            keyPresses.incrementAndGet();
+                                        }
+                                        return Boolean.TRUE;
+                                    }
+                                }
+                                try {
+                                    return m.invoke(orig, args);
+                                } catch (java.lang.reflect.InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                            }
+                        });
+                    window.setCallback(hook);
+                } catch (Throwable t) {
+                    originalCallback = null;
+                }
+            }
+        });
+    }
+
+    public static void removeKeyHook(final Activity activity) {
+        activity.runOnUiThread(new Runnable() {
+            public void run() {
+                try {
+                    if (originalCallback != null) activity.getWindow().setCallback(originalCallback);
+                } catch (Throwable ignored) { }
+                originalCallback = null;
+            }
+        });
+    }
+
+    /** Number of trigger presses since the last call (then reset to 0). */
+    public static int takeKeyPresses() { return keyPresses.getAndSet(0); }
+
+    public static int getLastKeyCode() { return lastKeyCode; }
+
+    // ---------------- system scan service (android.bld.ScanManager) ----------------
+    /** false = the system barcode scanner stops grabbing the trigger key (demo does this). */
+    public static String setScannerHandleKey(Context ctx, boolean handle) {
+        try {
+            Class<?> c = Class.forName("android.bld.ScanManager");
+            Object sm = c.getMethod("getDefaultInstance", Context.class).invoke(null, ctx);
+            c.getMethod("setHandleKey", boolean.class).invoke(sm, handle);
+            return "";
+        } catch (Throwable t) {
+            return "ScanManager: " + t;
+        }
+    }
 }
