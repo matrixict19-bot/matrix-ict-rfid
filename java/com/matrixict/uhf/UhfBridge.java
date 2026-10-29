@@ -9,6 +9,8 @@ import com.gg.reader.api.protocol.gx.MsgBaseStop;
 import android.app.Activity;
 import android.content.Context;
 import android.view.KeyEvent;
+import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.view.Window;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -173,5 +175,33 @@ public class UhfBridge implements HandlerTagEpcLog {
         } catch (Throwable t) {
             return "ScanManager: " + t;
         }
+    }
+
+    // ---------------- on-screen keyboard (scan field) ----------------
+    /** Hide the soft keyboard but keep the text field focused (scanner input keeps working). */
+    public static void hideKeyboard(final Activity activity) {
+        activity.runOnUiThread(new Runnable() {
+            public void run() {
+                try {
+                    InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                    View v = activity.getCurrentFocus();
+                    if (v == null) v = activity.getWindow().getDecorView();
+                    imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                } catch (Throwable ignored) { }
+            }
+        });
+    }
+
+    /** Show the soft keyboard (user tapped the scan field). */
+    public static void showKeyboard(final Activity activity) {
+        activity.runOnUiThread(new Runnable() {
+            public void run() {
+                try {
+                    InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                    View v = activity.getCurrentFocus();
+                    if (v != null) imm.showSoftInput(v, 0);
+                } catch (Throwable ignored) { }
+            }
+        });
     }
 }
