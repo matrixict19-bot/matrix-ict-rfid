@@ -53,6 +53,25 @@ jobs:
       - name: Build debug APK
         run: buildozer -v android debug
 
+      # Sign with the fixed Matrix ICT key (GitHub secret KEYSTORE_B64) so every new APK
+      # installs over the old one and keeps the app data. Without the secret the debug
+      # signature is kept (then the old app must be uninstalled first).
+      - name: Sign APK with stable key
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "No KEYSTORE_B64 secret - keeping debug signature"; exit 0; fi
+          echo "$KEYSTORE_B64" | base64 -d > matrix.keystore
+          BT=$(ls -d "$HOME"/.buildozer/android/platform/android-sdk/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+          APK=$(ls bin/*.apk | head -1)
+          "$BT/zipalign" -f -p 4 "$APK" aligned.apk
+          "$BT/apksigner" sign --ks matrix.keystore --ks-key-alias matrix \
+            --ks-pass pass:9a10a083198c3c3964c2e856 --key-pass pass:9a10a083198c3c3964c2e856 \
+            --out bin/MatrixICT-RFID-signed.apk aligned.apk
+          "$BT/apksigner" verify --print-certs bin/MatrixICT-RFID-signed.apk
+          rm -f "$APK" aligned.apk matrix.keystore
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
